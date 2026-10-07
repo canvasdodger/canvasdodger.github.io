@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#02040a" />
+  <meta name="description" content="NEON PROTOCOL — a futuristic canvas dodger. Classic 5-sector campaign, endless storm, and multiplayer race vs bots." />
+  <meta property="og:title" content="Canvas Dodger // NEON PROTOCOL" />
+  <meta property="og:description" content="Dodge, graze, and breach the Core. 3 protocols. One survivor." />
+  <title>Canvas Dodger // NEON PROTOCOL</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ================= HOME / HUB ================= -->
+  <div id="screen-home" class="screen active">
+    <div class="grid-bg" aria-hidden="true"></div>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <header class="hero">
+      <div class="sys-actions">
+        <button class="icon-btn btn-mute" aria-label="Toggle sound" title="Toggle sound (M)">&#9834;</button>
+        <button class="icon-btn btn-full" aria-label="Toggle fullscreen" title="Fullscreen (F)">&#x26F6;</button>
+      </div>
+      <div class="eyebrow">NEON PROTOCOL // SYSTEMS READY</div>
+      <h1 class="glitch" data-text="CANVAS // DODGER">CANVAS // DODGER</h1>
+      <p class="tagline">Select protocol to engage</p>
+    </header>
+
+    <main class="mode-grid">
+      <article class="mode-card" tabindex="0" data-goto="classic">
+        <div class="card-icon">&#9670;</div>
+        <h2>CLASSIC</h2>
+        <p>Sector campaign. Clear objectives, ranks, escalating power-ups across 5+ sectors.</p>
+        <div class="card-meta"><span id="metaClassic">SECTOR 01</span></div>
+        <span class="launch">LAUNCH <kbd>1</kbd></span>
+      </article>
+
+      <article class="mode-card" tabindex="0" data-goto="endless">
+        <div class="card-icon">&infin;</div>
+        <h2>ENDLESS</h2>
+        <p>One life against an escalating storm. The longer you last, the stronger the drops.</p>
+        <div class="card-meta"><span id="metaEndless">BEST — 0</span></div>
+        <span class="launch">LAUNCH <kbd>2</kbd></span>
+      </article>
+
+      <article class="mode-card" tabindex="0" data-goto="multiplayer">
+        <div class="card-icon">&#9876;</div>
+        <h2>MULTIPLAYER</h2>
+        <p>Race against time. You vs bot — or lobby up for online. Last one standing wins.</p>
+        <div class="card-meta"><span id="metaBot">VS BOT — 0 WINS</span></div>
+        <span class="launch">LOBBY <kbd>3</kbd></span>
+      </article>
+
+      <article class="mode-card secret" id="cardNull" tabindex="0" data-goto="null" hidden>
+        <div class="card-icon glitch-mini" data-text="&#8981;">&#8981;</div>
+        <h2>S06 — NULL PROTOCOL</h2>
+        <p>Classified. Full chaos: every hazard. Survive 90s.</p>
+        <div class="card-meta"><span id="metaNull">BEST — 0</span></div>
+        <span class="launch">BREACH <kbd>4</kbd></span>
+      </article>
+    </main>
+
+    <div class="home-foot">
+      <button class="ghost-btn" id="btnHowto">HOW TO PLAY</button>
+      <p>Built with HTML, CSS &amp; JavaScript · no assets · 60fps</p>
+    </div>
+  </div>
+
+  <!-- ================= MULTIPLAYER LOBBY ================= -->
+  <div id="screen-lobby" class="screen">
+    <div class="grid-bg" aria-hidden="true"></div>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <header class="hero compact">
+      <div class="sys-actions">
+        <button class="icon-btn btn-mute" aria-label="Toggle sound">&#9834;</button>
+        <button class="icon-btn btn-full" aria-label="Fullscreen">&#x26F6;</button>
+        <button class="icon-btn" id="btnLobbyHome" aria-label="Back">&#8617;</button>
+      </div>
+      <div class="eyebrow">MULTIPLAYER // RACE FOR SURVIVAL</div>
+      <h1 class="small">CHOOSE YOUR DUEL</h1>
+      <p class="tagline">Both racers share the same seed. Last one alive wins.</p>
+    </header>
+
+    <main class="mode-grid">
+      <article class="mode-card" tabindex="0" data-bot="rookie">
+        <div class="card-icon">&#9673;</div>
+        <h2>ROOKIE BOT</h2>
+        <p>Slow reactions, wide turns. Good for warm-up runs.</p>
+        <span class="launch">ENGAGE <kbd>Q</kbd></span>
+      </article>
+      <article class="mode-card" tabindex="0" data-bot="pro">
+        <div class="card-icon">&#9679;</div>
+        <h2>PRO BOT</h2>
+        <p>Quick reads, tight dodges. It will keep pace with you.</p>
+        <span class="launch">ENGAGE <kbd>W</kbd></span>
+      </article>
+      <article class="mode-card" tabindex="0" data-bot="nightmare">
+        <div class="card-icon">&#9670;</div>
+        <h2>NIGHTMARE</h2>
+        <p>Near-perfect reactions. Almost no wasted movement.</p>
+        <span class="launch">ENGAGE <kbd>E</kbd></span>
+      </article>
+      <article class="mode-card locked" id="cardOnline">
+        <div class="card-icon">&#9877;</div>
+        <h2>VS PLAYERS — ONLINE</h2>
+        <p>Room-code races against real players.</p>
+        <div class="room-row">
+          <input id="roomCode" type="text" maxlength="6" placeholder="ROOM CODE" readonly />
+          <button class="ghost-btn" id="btnRoom">CREATE</button>
+        </div>
+        <span class="launch soon">COMING SOON</span>
+      </article>
+    </main>
+
+    <div class="home-foot"><p>Online backend ships with the hosting phase — bot races are live now.</p></div>
+  </div>
+
+  <!-- ================= GAME ARENA ================= -->
+  <div id="screen-game" class="screen">
+    <div id="stage">
+      <div class="hud-top">
+        <div class="hud-cell"><span class="hud-label">SCORE</span><b id="hudScore">0</b></div>
+        <div class="hud-cell wide"><span class="hud-label">STATUS</span><b id="hudMidVal">—</b></div>
+        <div class="hud-cell"><span class="hud-label">STATE</span><b id="hudStatus">READY</b></div>
+        <div class="hud-actions">
+          <button class="icon-btn btn-mute" aria-label="Toggle sound">&#9834;</button>
+          <button class="icon-btn btn-full" aria-label="Fullscreen">&#x26F6;</button>
+          <button class="icon-btn" id="btnPause" aria-label="Pause">&#9208;</button>
+        </div>
+      </div>
+
+      <canvas id="gameCanvas" width="960" height="540"></canvas>
+
+      <div class="hud-bottom" id="hudHint">A/D or arrows move · drag on mobile · P pause · F fullscreen · M sound</div>
+
+      <div class="banner" id="banner" hidden></div>
+
+      <div class="overlay" id="overlay" hidden>
+        <div class="panel" id="overlayPanel"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= HOW TO PLAY ================= -->
+  <div class="modal" id="howto" hidden>
+    <div class="panel">
+      <h3>HOW TO PLAY</h3>
+      <ul>
+        <li><b>Move:</b> A/D, arrows, or drag on the arena.</li>
+        <li><b>Goal:</b> dodge hazards, grab pickups, clear sector objectives.</li>
+        <li><b>Power-ups:</b> Shield, Slow-Time, Magnet &rarr; Phase, Blast, 2&times; &rarr; Overdrive, Revive, Freeze. Each mode unlocks tiers differently.</li>
+        <li><b>Pause:</b> P or Esc · <b>Fullscreen:</b> F · <b>Sound:</b> M · <b>Start/confirm:</b> Space.</li>
+        <li><b>Classic:</b> 3 lives per sector, ranks S/A/B/C, progress saved.</li>
+        <li><b>Endless:</b> 1 life, phases every 30s, drops get stronger the longer you last.</li>
+        <li><b>Multiplayer:</b> race a bot — both share the same hazard seed, last alive wins.</li>
+      </ul>
+      <button class="ghost-btn" id="btnHowtoClose">CLOSE</button>
+    </div>
+  </div>
+
+  <div id="ghostDot" aria-hidden="true"></div>
+
+  <script src="game.js"></script>
+</body>
+</html>
+

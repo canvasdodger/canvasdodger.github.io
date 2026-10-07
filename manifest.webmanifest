@@ -1,0 +1,13 @@
+{
+  "name": "Canvas Dodger // NEON PROTOCOL",
+  "short_name": "NEON Dodger",
+  "description": "Futuristic canvas dodger: Classic 5-sector campaign, endless storm, multiplayer bot races.",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#02040a",
+  "theme_color": "#02040a",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

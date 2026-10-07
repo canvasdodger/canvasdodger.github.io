@@ -1,0 +1,29 @@
+# Canvas Dodger // NEON PROTOCOL
+
+Futuristic static canvas dodger. No build, no assets — just `index.html` + `style.css` + `game.js`.
+
+## Modes
+- **CLASSIC** — S01–S05 sector campaign + secret S06 NULL PROTOCOL (unlock with all S-ranks)
+- **ENDLESS** — 1 life, escalating phases every 30s, drops get stronger over time
+- **MULTIPLAYER** — race bots (Rookie / Pro / Nightmare) on mirrored lanes; online room-codes are a lobby mock until the backend phase
+
+## Controls
+- Move: A/D, arrows, or drag · Start: Space · Pause: P/Esc · Fullscreen: F · Mute: M
+- Hub shortcuts: 1/2/3 (+4 for S06 when unlocked) · Lobby: Q/W/E
+
+## Run locally
+```bash
+python3 -m http.server 8000
+# open http://localhost:8000
+```
+
+## Deploy
+- **Netlify:** drag-drop folder or import repo (`netlify.toml` included)
+- **Vercel:** import repo (`vercel.json` included)
+- **GitHub Pages:** push to `main`, enable Pages (Actions or branch)
+
+## Updating content
+- Add sectors in `game.js` → `SECTORS` array (`{id, code, name, story, objective, pattern, speedMul, palette}`)
+- Power-up tiers: `POWERUPS` + `TIER_KEYS`, gating in `tierMax()`
+- Bot skill: `BOT_SPECS`
+- Saves: `localStorage` keys `dodger_*_v1`
