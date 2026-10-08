@@ -124,6 +124,22 @@ h1.glitch::after { color: var(--cyan); animation: glitch-b 2.7s infinite steps(1
   width: min(100%, 980px);
   margin-top: 26px;
 }
+.mode-grid.bots {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.mode-card.final-boss {
+  border-color: rgba(255, 43, 60, 0.55);
+  background: linear-gradient(160deg, rgba(255,43,60,0.14), rgba(0,0,0,0.32));
+}
+.mode-card.final-boss .card-icon {
+  color: #ff3b46;
+  text-shadow: 0 0 18px rgba(255, 59, 70, 0.85);
+}
+.mode-card.final-boss h2 { color: #ffd4d4; }
+.mode-card.final-boss:hover, .mode-card.final-boss:focus-visible {
+  border-color: #ff3b46;
+  box-shadow: 0 14px 40px rgba(255, 59, 70, 0.22), 0 0 24px rgba(255, 59, 70, 0.16);
+}
 
 .mode-card {
   position: relative;

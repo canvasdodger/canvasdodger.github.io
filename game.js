@@ -33,6 +33,35 @@
     mute: "dodger_mute_v1"
   };
 
+  // per-bot win keys (v2); legacy single counter migrates to easy
+  var BOT_IDS = ["easy", "normal", "hard", "elite", "hell"];
+  var BOT_ALIAS = { rookie: "easy", pro: "hard", nightmare: "hell" };
+  function botWinsKey(id) { return "dodger_bot_wins_" + id + "_v2"; }
+  function normalizeBot(id) {
+    if (!id) return "easy";
+    id = String(id).toLowerCase();
+    if (BOT_ALIAS[id]) return BOT_ALIAS[id];
+    return BOT_IDS.indexOf(id) >= 0 ? id : "easy";
+  }
+  function migrateBotWins() {
+    try {
+      var legacy = localStorage.getItem(K.botWins);
+      if (legacy != null && localStorage.getItem(botWinsKey("easy")) == null) {
+        localStorage.setItem(botWinsKey("easy"), legacy);
+      }
+    } catch (e) {}
+  }
+  migrateBotWins();
+  function getBotWins(id) {
+    var total = 0, per = {};
+    BOT_IDS.forEach(function (b) {
+      var v = Store.get(botWinsKey(b), 0) | 0;
+      per[b] = v; total += v;
+    });
+    if (id) return per[normalizeBot(id)] || 0;
+    return { total: total, per: per };
+  }
+
   var Store = {
     get: function (key, fb) {
       try { var v = localStorage.getItem(key); return v == null ? fb : JSON.parse(v); }
@@ -170,20 +199,40 @@
     if (name === "home") refreshHome();
   }
 
+  function campaignSectors() {
+    return SECTORS.filter(function (s) { return !s.secret; });
+  }
+
   function rankSummary() {
     var s = 0, n = 0;
-    for (var i = 1; i <= 5; i++) { if (prog.ranks[i]) { n++; if (prog.ranks[i] === "S") s++; } }
+    campaignSectors().forEach(function (sec) {
+      if (prog.ranks[sec.id]) { n++; if (prog.ranks[sec.id] === "S") s++; }
+    });
     return s + "/" + n + " S-RANKS";
   }
 
+  function sRankCount() {
+    var s = 0;
+    campaignSectors().forEach(function (sec) { if (prog.ranks[sec.id] === "S") s++; });
+    return s;
+  }
+
   function refreshHome() {
-    var next = Math.min(prog.unlocked, 5);
-    $("#metaClassic").textContent = prog.unlocked > 5
+    var camp = campaignSectors();
+    var maxId = camp.length ? camp[camp.length - 1].id : 5;
+    var next = Math.min(prog.unlocked, maxId);
+    $("#metaClassic").textContent = prog.unlocked > maxId
       ? "ALL SECTORS CLEARED — " + rankSummary()
       : "NEXT — SECTOR 0" + next;
     $("#metaEndless").textContent = "BEST — " + Store.get(K.bestEndless, 0);
-    var wins = Store.get(K.botWins, 0);
+    var wins = getBotWins().total;
     $("#metaBot").textContent = "VS BOT — " + wins + " WIN" + (wins === 1 ? "" : "S");
+    var per = getBotWins().per;
+    $$("[data-botwins]").forEach(function (el) {
+      var bid = el.getAttribute("data-botwins");
+      var v = (per && per[bid]) || 0;
+      el.textContent = v + " WIN" + (v === 1 ? "" : "S");
+    });
     $("#metaNull").textContent = "BEST — " + Store.get(K.bestNull, 0);
     var nullCard = $("#cardNull");
     if (nullCard) nullCard.hidden = !prog.nullUnlocked;
@@ -193,7 +242,7 @@
     var h = (location.hash || "").replace(/^#\/?/, "");
     if (h === "classic") { showScreen("game"); startMode("classic"); }
     else if (h === "endless") { showScreen("game"); startMode("endless"); }
-    else if (h === "multiplayer") { stopLoop(); G.state = "idle"; hideOverlay(); bannerEl.hidden = true; showScreen("lobby"); }
+    else if (h === "multiplayer") { stopLoop(); G.state = "idle"; hideOverlay(); bannerEl.hidden = true; showScreen("lobby"); refreshHome(); }
     else if (h === "null") {
       if (prog.nullUnlocked) { showScreen("game"); startMode("null"); }
       else location.hash = "";
@@ -263,15 +312,23 @@
     { name: "PHASE 06 — TOTAL COLLAPSE", pattern: "mix" }
   ];
 
+  // 5-bot ladder: easy < normal < hard < elite < hell (hell = final boss).
+  // mistakeEvery: forced misread interval so even top bots stay beatable.
   var BOT_SPECS = {
-    rookie:     { maxSpeed: 230, error: 55, react: 0.34 },
-    pro:        { maxSpeed: 360, error: 22, react: 0.20 },
-    nightmare:  { maxSpeed: 520, error: 7,  react: 0.10 }
+    easy:      { maxSpeed: 180, error: 70, react: 0.42, mistakeEvery: 4.0, label: "EASY" },
+    normal:    { maxSpeed: 300, error: 35, react: 0.26, mistakeEvery: 5.5, label: "NORMAL" },
+    hard:      { maxSpeed: 380, error: 20, react: 0.18, mistakeEvery: 6.5, label: "HARD" },
+    elite:     { maxSpeed: 600, error: 3,  react: 0.06, mistakeEvery: 7.0, label: "ELITE" },
+    hell:      { maxSpeed: 560, error: 8,  react: 0.09, mistakeEvery: 6.0, label: "HELL" },
+    // legacy aliases (old saves / keys keep working)
+    rookie:    { maxSpeed: 180, error: 70, react: 0.42, mistakeEvery: 4.0, label: "EASY" },
+    pro:       { maxSpeed: 380, error: 20, react: 0.18, mistakeEvery: 6.5, label: "HARD" },
+    nightmare: { maxSpeed: 560, error: 8,  react: 0.09, mistakeEvery: 6.0, label: "HELL" }
   };
 
   // ================= game state =================
   var G = {
-    mode: null, state: "idle", sector: null, difficulty: "rookie",
+    mode: null, state: "idle", sector: null, difficulty: "easy",
     score: 0, lives: 3, elapsed: 0, timeLeft: 0,
     spawnT: 0, spawnGap: 0.8, phaseIdx: 0, phaseClock: 0, pkTmr: 4, shardTmr: 0,
     bannerT: 0,
@@ -325,7 +382,7 @@
   function startMode(mode, opts) {
     opts = opts || {};
     G.mode = mode;
-    G.difficulty = opts.difficulty || G.difficulty;
+    G.difficulty = normalizeBot(opts.difficulty || G.difficulty);
     G.score = 0;
     G.elapsed = 0;
     G.graze = 0;
@@ -349,7 +406,10 @@
       if (mode === "null") {
         G.sector = SECTORS[5];
       } else {
-        var sid = opts.sector || Math.min(prog.unlocked, 5);
+        var campIds = campaignSectors().map(function (s) { return s.id; });
+        var maxUnlock = campIds.length ? campIds[campIds.length - 1] : 5;
+        var sid = opts.sector || Math.min(prog.unlocked, maxUnlock);
+        if (campIds.indexOf(sid) < 0) sid = campIds[0];
         G.sector = SECTORS[sid - 1];
       }
       G.lives = 3;
@@ -380,15 +440,17 @@
       G.timeLeft = 0;
       G.spawnGap = 0.75;
       G.phaseIdx = 0;
-      var spec = BOT_SPECS[G.difficulty] || BOT_SPECS.rookie;
+      var spec = BOT_SPECS[G.difficulty] || BOT_SPECS.easy;
       player = makeShip(200, "#00f0ff");
       player.laneMax = 440;
       G.bot = {
         ship: makeShip(700, "#ff2bd6"),
         spec: spec,
+        botId: G.difficulty,
         alive: true,
         thinkT: 0,
         targetX: 700,
+        mistakeT: (spec.mistakeEvery || 6) * 0.7,
         laneMin: 520,
         laneMax: 930
       };
@@ -727,13 +789,18 @@
       var rank = computeRank();
       var prev = prog.ranks[s.id];
       if (!G.ghostScore && (!prev || rankBetter(rank, prev))) prog.ranks[s.id] = rank;
-      if (!G.ghostScore && s.id === prog.unlocked && s.id < 6) prog.unlocked = s.id + 1;
-      var allS = true;
-      for (var i = 1; i <= 5; i++) if (prog.ranks[i] !== "S") { allS = false; break; }
+      var campList = campaignSectors();
+      var lastCampId = campList.length ? campList[campList.length - 1].id : 5;
+      if (!G.ghostScore && s.id === prog.unlocked && s.id < lastCampId) prog.unlocked = s.id + 1;
+      if (!G.ghostScore && s.id === lastCampId && prog.unlocked <= lastCampId) prog.unlocked = lastCampId + 1;
+      var allS = campList.length > 0;
+      for (var ci = 0; ci < campList.length; ci++) {
+        if (prog.ranks[campList[ci].id] !== "S") { allS = false; break; }
+      }
       var wasNull = prog.nullUnlocked;
       if (allS && !G.ghostScore) prog.nullUnlocked = true;
       if (!G.ghostScore) saveProgress();
-      var nextReady = s.id + 1 <= prog.unlocked && s.id < 5;
+      var nextReady = (s.id + 1 <= prog.unlocked) && (s.id < lastCampId);
       showOverlay(
         '<h2 class="win">' + s.code + " CLEARED</h2>" +
         '<div class="rank">' + (G.ghostScore ? "—" : rank) + "</div>" +
@@ -817,14 +884,18 @@
   }
 
   function botWinFlow(playerWon) {
-    var wins = Store.get(K.botWins, 0);
+    var bid = normalizeBot(G.bot ? G.bot.botId : G.difficulty);
+    var key = botWinsKey(bid);
+    var wins = Store.get(key, 0) | 0;
     if (playerWon) {
-      if (!G.ghostScore) { wins += 1; Store.set(K.botWins, wins); }
-      else wins += 1;
+      wins += 1;
+      if (!G.ghostScore) Store.set(key, wins);
     }
+    var label = (BOT_SPECS[bid] && BOT_SPECS[bid].label) || bid.toUpperCase();
+    var total = getBotWins().total;
     showOverlay(
-      '<h2 class="' + (playerWon ? "win" : "lose") + '">' + (playerWon ? "YOU OUTLASTED THE BOT" : "BOT OUTLASTED YOU") + "</h2>" +
-      '<div class="stats"><span>SURVIVED ' + G.elapsed.toFixed(1) + "s</span><span>WINS " + wins + "</span></div>" +
+      '<h2 class="' + (playerWon ? "win" : "lose") + '">' + (playerWon ? "YOU OUTLASTED " + label : label + " OUTLASTED YOU") + "</h2>" +
+      '<div class="stats"><span>SURVIVED ' + G.elapsed.toFixed(1) + "s</span><span>VS " + label + ": " + wins + "</span><span>TOTAL " + total + "</span></div>" +
       '<div class="btn-row"><button class="ghost-btn primary" data-act="retry">REMATCH</button>' +
       '<button class="ghost-btn" data-act="lobby">LOBBY</button>' +
       '<button class="ghost-btn" data-act="home">HOME</button></div>'
@@ -852,6 +923,13 @@
     var b = G.bot;
     if (!b || !b.alive) return;
     var s = b.ship;
+    // forced misread pulse: even hell/elite must stay beatable
+    b.mistakeT -= dt;
+    var mistakeNow = false;
+    if (b.mistakeT <= 0) {
+      b.mistakeT = (b.spec.mistakeEvery || 6) * rand(0.85, 1.2);
+      mistakeNow = true;
+    }
     b.thinkT -= dt;
     if (b.thinkT <= 0) {
       b.thinkT = b.spec.react;
@@ -865,20 +943,30 @@
         if (d >= -30 && d < bestD) { bestD = d; best = o; }
       }
       if (best) {
+        // hell/elite look one extra threat ahead so they feel inhuman
+        var hard = (b.botId === "hell" || b.botId === "elite");
+        var dodgeBias = hard ? 26 : 14;
         var cand = [];
-        if (best.x - s.w - 14 >= b.laneMin) cand.push(best.x - s.w - 14);
-        if (best.x + best.w + 14 + s.w <= b.laneMax) cand.push(best.x + best.w + 14);
+        if (best.x - s.w - dodgeBias >= b.laneMin) cand.push(best.x - s.w - dodgeBias);
+        if (best.x + best.w + dodgeBias + s.w <= b.laneMax) cand.push(best.x + best.w + dodgeBias);
         var tx;
         if (!cand.length) tx = b.laneMin;
         else if (cand.length === 1) tx = cand[0];
         else tx = Math.abs(cand[0] - s.x) < Math.abs(cand[1] - s.x) ? cand[0] : cand[1];
-        b.targetX = tx + rand(-b.spec.error, b.spec.error);
+        var err = mistakeNow ? b.spec.error * 3.2 : b.spec.error;
+        b.targetX = tx + rand(-err, err);
       } else {
         b.targetX = b.laneMin + (b.laneMax - b.laneMin) / 2 - s.w / 2;
+        if (mistakeNow) b.targetX += rand(-80, 80);
       }
       b.targetX = clamp(b.targetX, b.laneMin, b.laneMax - s.w);
     }
-    s.x += clamp(b.targetX - s.x, -b.spec.maxSpeed * dt, b.spec.maxSpeed * dt);
+    // rubber-band: top bots can't outrun the player by pure speed
+    var cap = b.spec.maxSpeed;
+    if ((b.botId === "hell" || b.botId === "elite") && player && G.elapsed > 45) {
+      cap = Math.min(cap, 420 + G.elapsed * 1.1);
+    }
+    s.x += clamp(b.targetX - s.x, -cap * dt, cap * dt);
     s.x = clamp(s.x, b.laneMin, b.laneMax - s.w);
     s.trail.push({ x: s.x + s.w / 2, y: s.y + s.h, t: 0.35 });
     if (s.trail.length > 26) s.trail.shift();
@@ -1373,7 +1461,10 @@
     drawObstacles();
     drawBoss(time);
     drawShip(player, null);
-    if (G.bot && G.bot.alive) drawShip(G.bot.ship, G.difficulty.toUpperCase());
+    if (G.bot && G.bot.alive) {
+      var botLabel = (G.bot.spec && G.bot.spec.label) || (G.bot.botId || G.difficulty || "").toUpperCase();
+      drawShip(G.bot.ship, botLabel);
+    }
     drawFx();
 
     if (G.shield > 0) {
@@ -1459,9 +1550,11 @@
       if (k === "4" && prog.nullUnlocked) location.hash = "#/null";
     }
     if (activeScreen() === "lobby") {
-      if (k === "q" || k === "Q") startBot("rookie");
-      if (k === "w" || k === "W") startBot("pro");
-      if (k === "e" || k === "E") startBot("nightmare");
+      if (k === "q" || k === "Q") startBot("easy");
+      if (k === "w" || k === "W") startBot("normal");
+      if (k === "e" || k === "E") startBot("hard");
+      if (k === "r" || k === "R") startBot("elite");
+      if (k === "t" || k === "T") startBot("hell");
     }
   });
 
@@ -1533,6 +1626,7 @@
 
   function startBot(difficulty) {
     Sfx.ensure();
+    difficulty = normalizeBot(difficulty);
     if (location.hash) location.hash = "#/multiplayer";
     startMode("multiplayer", { difficulty: difficulty });
   }
@@ -1553,7 +1647,14 @@
       startMode(mode, opts);
     } else if (act === "next") {
       hideOverlay();
-      var nextSid = Math.min((G.sector ? G.sector.id : 1) + 1, 5);
+      var campNext = campaignSectors();
+      var curId = G.sector ? G.sector.id : 1;
+      var nextSid = curId + 1;
+      var ok = false;
+      for (var ni = 0; ni < campNext.length; ni++) {
+        if (campNext[ni].id === nextSid) { ok = true; break; }
+      }
+      if (!ok && campNext.length) nextSid = campNext[campNext.length - 1].id;
       startMode("classic", { sector: nextSid });
     }
   });

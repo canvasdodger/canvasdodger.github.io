@@ -85,27 +85,44 @@
       </div>
       <div class="eyebrow">MULTIPLAYER // RACE FOR SURVIVAL</div>
       <h1 class="small">CHOOSE YOUR DUEL</h1>
-      <p class="tagline">Both racers share the same seed. Last one alive wins.</p>
+      <p class="tagline">Five bots. One final boss. Last one alive wins.</p>
     </header>
 
-    <main class="mode-grid">
-      <article class="mode-card" tabindex="0" data-bot="rookie">
+    <main class="mode-grid bots">
+      <article class="mode-card" tabindex="0" data-bot="easy">
         <div class="card-icon">&#9673;</div>
-        <h2>ROOKIE BOT</h2>
+        <h2>EASY BOT</h2>
         <p>Slow reactions, wide turns. Good for warm-up runs.</p>
+        <div class="card-meta"><span data-botwins="easy">0 WINS</span></div>
         <span class="launch">ENGAGE <kbd>Q</kbd></span>
       </article>
-      <article class="mode-card" tabindex="0" data-bot="pro">
-        <div class="card-icon">&#9679;</div>
-        <h2>PRO BOT</h2>
-        <p>Quick reads, tight dodges. It will keep pace with you.</p>
+      <article class="mode-card" tabindex="0" data-bot="normal">
+        <div class="card-icon">&#9678;</div>
+        <h2>NORMAL BOT</h2>
+        <p>Steady reads, honest pace. The real baseline duel.</p>
+        <div class="card-meta"><span data-botwins="normal">0 WINS</span></div>
         <span class="launch">ENGAGE <kbd>W</kbd></span>
       </article>
-      <article class="mode-card" tabindex="0" data-bot="nightmare">
-        <div class="card-icon">&#9670;</div>
-        <h2>NIGHTMARE</h2>
-        <p>Near-perfect reactions. Almost no wasted movement.</p>
+      <article class="mode-card" tabindex="0" data-bot="hard">
+        <div class="card-icon">&#9679;</div>
+        <h2>HARD BOT</h2>
+        <p>Quick reads, tight dodges. It will keep pace with you.</p>
+        <div class="card-meta"><span data-botwins="hard">0 WINS</span></div>
         <span class="launch">ENGAGE <kbd>E</kbd></span>
+      </article>
+      <article class="mode-card" tabindex="0" data-bot="elite">
+        <div class="card-icon">&#9670;</div>
+        <h2>ELITE BOT</h2>
+        <p>Near-perfect reactions. Cracks about once every 7s — punish it.</p>
+        <div class="card-meta"><span data-botwins="elite">0 WINS</span></div>
+        <span class="launch">ENGAGE <kbd>R</kbd></span>
+      </article>
+      <article class="mode-card final-boss" tabindex="0" data-bot="hell">
+        <div class="card-icon">&#9760;</div>
+        <h2>HELL — FINAL BOSS</h2>
+        <p>Inhuman pace, tiny errors. Survive the storm longer than it can.</p>
+        <div class="card-meta"><span data-botwins="hell">0 WINS</span></div>
+        <span class="launch">CHALLENGE <kbd>T</kbd></span>
       </article>
       <article class="mode-card locked" id="cardOnline">
         <div class="card-icon">&#9877;</div>
@@ -159,7 +176,7 @@
         <li><b>Pause:</b> P or Esc · <b>Fullscreen:</b> F · <b>Sound:</b> M · <b>Start/confirm:</b> Space.</li>
         <li><b>Classic:</b> 3 lives per sector, ranks S/A/B/C, progress saved.</li>
         <li><b>Endless:</b> 1 life, phases every 30s, drops get stronger the longer you last.</li>
-        <li><b>Multiplayer:</b> race a bot — both share the same hazard seed, last alive wins.</li>
+        <li><b>Multiplayer:</b> race a bot — Easy / Normal / Hard / Elite / Hell (final boss). Both share the same hazard seed, last alive wins.</li>
       </ul>
       <button class="ghost-btn" id="btnHowtoClose">CLOSE</button>
     </div>
