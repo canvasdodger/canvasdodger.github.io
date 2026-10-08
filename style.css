@@ -305,6 +305,64 @@ h1.glitch::after { color: var(--cyan); animation: glitch-b 2.7s infinite steps(1
   max-width: 100%;
 }
 .hud-actions { display: flex; gap: 8px; align-items: center; }
+.hud-cell.aura-cell { border-width: 2px; }
+.hud-cell.aura-cell b {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.hud-cell.aura-cell b .aura-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 10px currentColor;
+  animation: aura-pulse 1.1s ease-in-out infinite;
+}
+@keyframes aura-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.55; }
+}
+
+/* ---------- aura pad (mobile cheat entry) ---------- */
+.aura-panel { width: min(94vw, 560px); }
+.aura-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 14px 0 18px;
+}
+.aura-btn {
+  min-height: 64px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 2px solid var(--cyan);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+  touch-action: manipulation;
+}
+.aura-btn small {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+.aura-btn:active { transform: scale(0.96); }
+.aura-btn.on {
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 22px currentColor;
+}
+@media (max-width: 520px) {
+  .aura-grid { grid-template-columns: 1fr; }
+  .aura-btn { min-height: 56px; }
+}
 
 #gameCanvas {
   position: absolute;

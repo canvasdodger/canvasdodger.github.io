@@ -12,6 +12,14 @@ Futuristic static canvas dodger. No build, no assets — just `index.html` + `st
 ## Controls
 - Move: A/D, arrows, or drag · Start: Space · Pause: P/Esc · Fullscreen: F · Mute: M
 - Hub shortcuts: 1/2/3 (+4 for S06 when unlocked) · Lobby: Q/W/E
+- Mobile: drag to move, ⚡ button in the arena HUD opens the aura pad
+
+## ⚡ Aura cheat codes (how to play with powers)
+- **How (desktop):** just *type the word* anywhere outside the lobby — no Enter needed. Retype it to switch off, type another word to swap. One aura at a time; runs still save normally (ranks, unlocks, bests).
+- **How (phone):** tap the **⚡ button** in the arena HUD to open the aura pad, then tap a code.
+- **INVINCIBLE tier:** `thunderfist` (storm brawler — ram + 6s shockwave) · `kiphnic` (void-god — magnet + 2x score) · `kwoffie` (solar — 3x score, shard vacuum, +1 life once per run)
+- **Unique tier (mortal):** `zee` (speedster — +45% speed, 1.25x score) · `naya` (guardian — shield regen every 8s) · `ella` (phantom — 4s phase / 2s solid cycle)
+- Full in-game guide: home screen → **HOW TO PLAY**.
 
 ## Run locally
 ```bash

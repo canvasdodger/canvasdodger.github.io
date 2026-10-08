@@ -145,10 +145,12 @@
       <div class="hud-top">
         <div class="hud-cell"><span class="hud-label">SCORE</span><b id="hudScore">0</b></div>
         <div class="hud-cell wide"><span class="hud-label">STATUS</span><b id="hudMidVal">—</b></div>
+        <div class="hud-cell aura-cell" id="auraCell" hidden><span class="hud-label">AURA</span><b id="auraChip">—</b></div>
         <div class="hud-cell"><span class="hud-label">STATE</span><b id="hudStatus">READY</b></div>
         <div class="hud-actions">
           <button class="icon-btn btn-mute" aria-label="Toggle sound">&#9834;</button>
           <button class="icon-btn btn-full" aria-label="Fullscreen">&#x26F6;</button>
+          <button class="icon-btn" id="btnAura" aria-label="Aura cheat codes" title="Aura codes">&#x26A1;</button>
           <button class="icon-btn" id="btnPause" aria-label="Pause">&#9208;</button>
         </div>
       </div>
@@ -178,7 +180,28 @@
         <li><b>Endless:</b> 1 life, phases every 30s, drops get stronger the longer you last.</li>
         <li><b>Multiplayer:</b> race a bot — Easy / Normal / Hard / Elite / Hell (final boss). Both share the same hazard seed, last alive wins.</li>
       </ul>
+      <h3>⚡ AURA CHEAT CODES</h3>
+      <ul>
+        <li><b>How:</b> on desktop, just <b>type the word</b> anywhere outside the lobby (no Enter needed). Retype it to switch the aura off; type another word to swap. One aura at a time — runs still save normally.</li>
+        <li><b>On phone:</b> tap the <b>⚡ button</b> in the arena HUD to open the aura pad, then tap a code. Same toggle rule applies.</li>
+        <li><b class="cheat-name" style="color:#ffd75d">thunderfist</b> — INVINCIBLE storm brawler: ram through hazards + lightning shockwave every 6s.</li>
+        <li><b class="cheat-name" style="color:#7cf7ff">kiphnic</b> — INVINCIBLE void-god: permanent magnet + 2&times; score.</li>
+        <li><b class="cheat-name" style="color:#ff9a3c">kwoffie</b> — INVINCIBLE solar creator: 3&times; score, shard vacuum, +1 life (once per run).</li>
+        <li><b class="cheat-name" style="color:#5dff9a">zee</b> — speedster: +45% ship speed, 1.25&times; score. Fast but mortal.</li>
+        <li><b class="cheat-name" style="color:#5dd7ff">naya</b> — guardian: shield regenerates every 8s. Tanky but killable.</li>
+        <li><b class="cheat-name" style="color:#c99aff">ella</b> — phantom: phases 4s pass-through / 2s solid. Evasive, timing-based.</li>
+      </ul>
       <button class="ghost-btn" id="btnHowtoClose">CLOSE</button>
+    </div>
+  </div>
+
+  <!-- ================= AURA PAD (mobile + mouse cheat entry) ================= -->
+  <div class="modal" id="auraPad" hidden>
+    <div class="panel aura-panel">
+      <h3>⚡ AURA CODES</h3>
+      <p class="story">Tap a code to ignite its aura. Tap again to switch off. One aura at a time.</p>
+      <div class="aura-grid" id="auraGrid"></div>
+      <button class="ghost-btn" id="btnAuraClose">CLOSE</button>
     </div>
   </div>
 

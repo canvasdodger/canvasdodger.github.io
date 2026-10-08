@@ -136,6 +136,20 @@
     shieldRegen: function () { this.tone(660, 0.22, "sine", 0.04, 990); },
     phaseShift: function () { this.tone(500, 0.12, "sine", 0.018, 1000); },
     lifeGift: function () { this.tone(520, 0.3, "triangle", 0.05, 1040); },
+    // tiered combo stinger: tier 0 = silent, 1 = tick, 2 = fifth, 3 = octave + shimmer
+    comboSting: function (tier, base) {
+      if (tier <= 0) return;
+      var b = base || 660;
+      if (tier === 1) this.tone(b, 0.07, "square", 0.028, b * 1.5);
+      else if (tier === 2) {
+        this.tone(b, 0.08, "square", 0.03, b * 1.5);
+        this.tone(b * 1.5, 0.1, "triangle", 0.03, b * 2);
+      } else {
+        this.tone(b, 0.09, "square", 0.032, b * 2);
+        this.tone(b * 2, 0.14, "triangle", 0.032, b * 3);
+        this.tone(b * 3, 0.16, "sine", 0.02, b * 4);
+      }
+    },
     // ---- ambient aura drone: one soft looping voice per cheat, started/stopped with the aura
     drone: null, // { osc, osc2, gain, id }
     droneStart: function (id) {
@@ -289,6 +303,23 @@
     naya:        { f1: 196, f2: 261.6, wave: "sine", gain: 0.015 },
     ella:        { f1: 174.6, f2: 261.6, wave: "sine", gain: 0.012 }
   };
+  // combo-stinger voice per aura: base freq + combo thresholds for tier1/2/3
+  var CHEAT_STING = {
+    thunderfist: { base: 520, t1: 3, t2: 5, t3: 8 },
+    kiphnic:     { base: 660, t1: 3, t2: 5, t3: 8 },
+    kwoffie:     { base: 590, t1: 3, t2: 5, t3: 8 },
+    zee:         { base: 880, t1: 2, t2: 4, t3: 6 },
+    naya:        { base: 440, t1: 3, t2: 6, t3: 8 },
+    ella:        { base: 740, t1: 3, t2: 5, t3: 8 }
+  };
+  function comboTier(combo) {
+    var S = CHEAT_STING[activeCheat];
+    if (!S) return 0;
+    if (combo >= S.t3) return 3;
+    if (combo >= S.t2) return 2;
+    if (combo >= S.t1) return 1;
+    return 0;
+  }
   var CHEAT_PITCH = {
     thunderfist: 0.85,
     kiphnic: 1.3,
@@ -364,6 +395,7 @@
     }
     flashCheatDot();
     cheatFanfare(def);
+    syncAuraChip();
     if (def) Sfx.droneStart(activeCheat);
     else Sfx.droneStop();
   }
@@ -395,9 +427,81 @@
   var hudScore = $("#hudScore");
   var hudMidVal = $("#hudMidVal");
   var hudStatus = $("#hudStatus");
+  var auraCell = $("#auraCell");
+  var auraChip = $("#auraChip");
   var bannerEl = $("#banner");
   var overlay = $("#overlay");
   var overlayPanel = $("#overlayPanel");
+
+  // aura HUD chip: shows active cheat tag in its color, hidden when no aura
+  function syncAuraChip() {
+    if (!auraCell || !auraChip) return;
+    var def = cheatDef();
+    if (!def) { auraCell.hidden = true; }
+    else {
+      auraCell.hidden = false;
+      auraCell.style.borderColor = def.color;
+      auraCell.style.boxShadow = "0 0 18px " + def.glow;
+      auraChip.style.color = def.color;
+      auraChip.style.textShadow = "0 0 12px " + def.glow;
+      auraChip.innerHTML = "";
+      var dot = document.createElement("span");
+      dot.className = "aura-dot";
+      auraChip.appendChild(dot);
+      auraChip.appendChild(document.createTextNode("⚡" + def.tag));
+    }
+    syncAuraPad();
+  }
+
+  // aura pad (mobile/mouse cheat entry): one tap = one toggleCheat, same path as typing
+  var AURA_BLURB = {
+    thunderfist: "INVINCIBLE · ram + 6s shock",
+    kiphnic: "INVINCIBLE · magnet + 2x",
+    kwoffie: "INVINCIBLE · 3x + vacuum + life",
+    zee: "+45% speed · 1.25x",
+    naya: "shield every 8s",
+    ella: "4s phase / 2s solid"
+  };
+  function buildAuraPad() {
+    var grid = $("#auraGrid");
+    if (!grid || grid.children.length) return;
+    CHEAT_WORDS.forEach(function (w) {
+      var def = CHEATS[w];
+      var b = document.createElement("button");
+      b.className = "aura-btn";
+      b.type = "button";
+      b.setAttribute("data-aura", w);
+      b.style.borderColor = def.color;
+      b.style.color = def.color;
+      b.innerHTML = "⚡" + def.tag + "<small>" + (AURA_BLURB[w] || "") + "</small>";
+      b.addEventListener("click", function () {
+        if (activeScreen() === "lobby") return;
+        Sfx.ensure();
+        toggleCheat(w);
+      });
+      grid.appendChild(b);
+    });
+  }
+  function syncAuraPad() {
+    var grid = $("#auraGrid");
+    if (!grid) return;
+    Array.prototype.forEach.call(grid.children, function (b) {
+      b.classList.toggle("on", b.getAttribute("data-aura") === activeCheat);
+    });
+  }
+  function openAuraPad() {
+    if (activeScreen() === "lobby") return;
+    buildAuraPad();
+    syncAuraPad();
+    var pad = $("#auraPad");
+    if (!pad || !pad.hidden) return;
+    if (G.state === "playing") togglePause(true);
+    pad.hidden = false;
+  }
+  function closeAuraPad() {
+    var pad = $("#auraPad");
+    if (pad) pad.hidden = true;
+  }
 
   var WORLD = { w: 960, h: 540 };
   var view = { dpr: 1, scale: 1, ox: 0, oy: 0 };
@@ -423,6 +527,7 @@
     if (el) el.classList.add("active");
     if (name === "game") fitCanvas();
     if (name === "home") refreshHome();
+    syncAuraChip();
   }
 
   function campaignSectors() {
@@ -1567,6 +1672,9 @@
           G.score += bonus * scoreMult();
           addPopup(player.x + player.w / 2, player.y - 10, "GRAZE +" + bonus, "#7ce7ff");
           Sfx.graze();
+          if (activeCheat && CHEAT_STING[activeCheat]) {
+            Sfx.comboSting(comboTier(G.combo), CHEAT_STING[activeCheat].base);
+          }
         }
       }
       // bot collision
@@ -2244,6 +2352,17 @@
 
   $("#btnLobbyHome").addEventListener("click", goHome);
   $("#btnPause").addEventListener("click", function () { togglePause(); });
+  var btnAura = $("#btnAura");
+  if (btnAura) btnAura.addEventListener("click", function () {
+    var pad = $("#auraPad");
+    if (pad && !pad.hidden) closeAuraPad();
+    else openAuraPad();
+  });
+  var btnAuraClose = $("#btnAuraClose");
+  if (btnAuraClose) btnAuraClose.addEventListener("click", closeAuraPad);
+  var auraPad = $("#auraPad");
+  if (auraPad) auraPad.addEventListener("click", function (e) { if (e.target === auraPad) closeAuraPad(); });
+  buildAuraPad();
 
   $("#btnRoom").addEventListener("click", function () {
     var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
