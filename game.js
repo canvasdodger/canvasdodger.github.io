@@ -138,23 +138,121 @@
     pointerX: 0
   };
 
-  // owner-only inert (sequence tracked as keystroke stream; never stored or logged)
-  var secretFlag = false;
-  var secretSeq = "adadws";
+  // ================= cheat-code arsenal =================
+  // Keystroke-stream words; never stored or logged. One aura active at a time.
+  // Top tier (invincible): thunderfist / kiphnic / kwoffie. Unique tier: zee / naya / ella.
+  var CHEATS = {
+    thunderfist: { tag: "THUNDERFIST", color: "#ffd75d", glow: "#7c5dff",
+      ship: "#ffd75d", trail: "255,215,93",
+      env: { bg1: "#1a1040", bg2: "#05020f", grid: "rgba(124,93,255,0.20)", accent: "#ffd75d", enemy: "#7c5dff", shard: "#ffe9a8" },
+      invuln: true, ram: true, shockT: 6, title: "THUNDERFIST AWAKENS" },
+    kiphnic: { tag: "KIPHNIC", color: "#ffffff", glow: "#7cf7ff",
+      ship: "#ffffff", trail: "124,247,255",
+      env: { bg1: "#020208", bg2: "#000000", grid: "rgba(255,255,255,0.16)", accent: "#7cf7ff", enemy: "#5d6bff", shard: "#7cf7ff" },
+      invuln: true, magnet: true, scoreMul: 2, title: "KIPHNIC ASCENDANT" },
+    kwoffie: { tag: "KWOFFIE", color: "#ff9a3c", glow: "#ff3c00",
+      ship: "#ff9a3c", trail: "255,120,40",
+      env: { bg1: "#2a0e02", bg2: "#0a0200", grid: "rgba(255,120,40,0.20)", accent: "#ff9a3c", enemy: "#ff3c5d", shard: "#ffd75d" },
+      invuln: true, vacuum: 340, scoreMul: 3, bonusLife: true, title: "KWOFFIE IGNITES" },
+    zee: { tag: "ZEE", color: "#5dff9a", glow: "#00ff88",
+      ship: "#5dff9a", trail: "93,255,154",
+      env: { bg1: "#021a0e", bg2: "#000804", grid: "rgba(0,255,136,0.18)", accent: "#5dff9a", enemy: "#ff8a3c", shard: "#d2ffe2" },
+      invuln: false, speedMul: 1.45, scoreMul: 1.25, title: "ZEE UNLEASHED" },
+    naya: { tag: "NAYA", color: "#5dd7ff", glow: "#2b7fff",
+      ship: "#5dd7ff", trail: "93,215,255",
+      env: { bg1: "#041a24", bg2: "#010a10", grid: "rgba(43,127,255,0.20)", accent: "#5dd7ff", enemy: "#b18cff", shard: "#c8f1ff" },
+      invuln: false, regenShield: 8, title: "NAYA WATCHES OVER YOU" },
+    ella: { tag: "ELLA", color: "#c99aff", glow: "#7c2bff",
+      ship: "#c99aff", trail: "201,154,255",
+      env: { bg1: "#150826", bg2: "#060210", grid: "rgba(124,43,255,0.22)", accent: "#c99aff", enemy: "#ff5d8a", shard: "#ecd9ff" },
+      invuln: false, phaseCycle: true, title: "ELLA SLIPS THE VEIL" }
+  };
+  var CHEAT_WORDS = ["thunderfist", "kiphnic", "kwoffie", "zee", "naya", "ella"];
+  var activeCheat = null;      // id string or null
+  var cheatShockT = 0;         // thunderfist shockwave timer
+  var cheatShieldT = 0;        // naya regen timer
+  var cheatPhaseT = 0;         // ella phase clock
+  var cheatLifeGiven = false;  // kwoffie +1 life, once per run (no farm)
   var ghostDotT = 0;
+
+  function cheatDef() { return activeCheat ? CHEATS[activeCheat] : null; }
+
+  // unified score multiplier: pickup x2 * cheat aura (kiphnic 2x, kwoffie 3x, zee 1.25x)
+  function scoreMult() {
+    var m = (G.x2T > 0 || G.overT > 0) ? 2 : 1;
+    var cd = cheatDef();
+    if (cd && cd.scoreMul) m *= cd.scoreMul;
+    return m;
+  }
 
   function noteKey(ch) {
     if (!ch || !/[a-z]/i.test(ch)) return;
+    if (activeScreen() === "lobby") return;   // lobby bot keys (q/w/e/r/t) win there
     Input.seq = (Input.seq + ch.toLowerCase()).slice(-14);
-    if (Input.seq.slice(-secretSeq.length) === secretSeq) {
-      Input.seq = "";
-      secretFlag = !secretFlag;
-      flashSecretDot();
-      Sfx.tone(secretFlag ? 1200 : 700, 0.06, "sine", 0.02);
+    for (var i = 0; i < CHEAT_WORDS.length; i++) {
+      var w = CHEAT_WORDS[i];
+      if (Input.seq.slice(-w.length) === w) {
+        Input.seq = "";
+        toggleCheat(w);
+        return;
+      }
     }
   }
 
-  function flashSecretDot() {
+  // swallow p/m/f only when that key continues a cheat word (kiphnic, kwoffie, thunderfist)
+  function cheatSwallow(keyName) {
+    if (activeScreen() === "lobby") return false;
+    if (keyName !== "p" && keyName !== "m" && keyName !== "f") return false;
+    var tail = (Input.seq + keyName).slice(-14);
+    for (var i = 0; i < CHEAT_WORDS.length; i++) {
+      var w = CHEAT_WORDS[i];
+      if (w.indexOf(keyName) < 0) continue;
+      for (var n = 1; n <= w.length; n++) {
+        if (tail.slice(-n) === w.slice(0, n)) return true;
+      }
+      if (tail.slice(-w.length) === w) return true;
+    }
+    return false;
+  }
+
+  function toggleCheat(id) {
+    activeCheat = (activeCheat === id) ? null : id;
+    var def = cheatDef();
+    cheatShockT = (def && def.shockT) || 0;
+    cheatShieldT = 0;
+    cheatPhaseT = 0;
+    if (player) {
+      if (def) {
+        player.color = def.ship;
+        if (def.bonusLife && G.state === "playing" && !cheatLifeGiven) {
+          cheatLifeGiven = true;
+          G.lives = Math.min(5, G.lives + 1);
+        }
+      } else {
+        // aura off: restore the ship's natural color for this mode/sector
+        var fallback = "#00f0ff";
+        if (G.sector && G.sector.palette) fallback = G.sector.palette.accent;
+        player.color = fallback;
+      }
+    }
+    flashCheatDot();
+    cheatFanfare(def);
+  }
+
+  function cheatFanfare(def) {
+    if (!def) { Sfx.tone(700, 0.06, "sine", 0.02); return; }
+    G.flash = 0.5;
+    G.shake = 14;
+    if (player) {
+      burst(player.x + player.w / 2, player.y + player.h / 2, def.color, 40);
+      addPopup(player.x + player.w / 2, player.y - 16, def.title, def.color);
+    }
+    showBanner("⚡ " + def.title + " ⚡", 2.0);
+    Sfx.tone(880, 0.12, "square", 0.05, 1760);
+    setTimeout(function () { Sfx.tone(1320, 0.2, "triangle", 0.05, 2640); }, 120);
+  }
+
+  function flashCheatDot() {
     var dot = $("#ghostDot");
     if (!dot) return;
     dot.classList.add("on");
@@ -379,6 +477,11 @@
     return SECTORS[SECTORS.length - 1];
   }
 
+  function cheatShipColor(fallback) {
+    var cd = cheatDef();
+    return cd ? cd.ship : fallback;
+  }
+
   function makeShip(x, color) {
     return { x: x, y: 470, w: 54, h: 26, speed: 560, color: color, invuln: 0, trail: [] };
   }
@@ -416,7 +519,11 @@
     G.shield = 0;
     G.hasRevive = false;
     G.shake = G.flash = 0;
-    G.ghostScore = secretFlag;   // ghost runs never persist
+    G.ghostScore = false;   // cheat runs persist normally
+    cheatShockT = (activeCheat && CHEATS[activeCheat].shockT) || 0;
+    cheatShieldT = 0;
+    cheatPhaseT = 0;
+    cheatLifeGiven = false;
     G.won = false;
     G.seed = (Math.random() * 0xffffffff) >>> 0;
     G.rng = makeRng(G.seed);
@@ -440,7 +547,7 @@
       G.timeLeft = G.sector.objective.time;
       G.spawnGap = G.sector.pattern === "boss" ? 9 : 0.85;
       G.phaseIdx = 0;
-      player = makeShip(453, G.sector.palette.accent);
+      player = makeShip(453, cheatShipColor(G.sector.palette.accent));
       showScreen("game");
       briefing();
       return;
@@ -453,7 +560,7 @@
       G.spawnGap = 0.8;
       G.phaseIdx = 0;
       G.phaseClock = 0;
-      player = makeShip(453, "#00f0ff");
+      player = makeShip(453, cheatShipColor("#00f0ff"));
       beginPlay();
       return;
     }
@@ -465,7 +572,7 @@
       G.spawnGap = 0.75;
       G.phaseIdx = 0;
       var spec = BOT_SPECS[G.difficulty] || BOT_SPECS.easy;
-      player = makeShip(200, "#00f0ff");
+      player = makeShip(200, cheatShipColor("#00f0ff"));
       player.laneMax = 440;
       G.bot = {
         ship: makeShip(700, "#ff2bd6"),
@@ -564,6 +671,8 @@
   }
 
   function paletteNow() {
+    var cd = cheatDef();
+    if (cd) return cd.env;   // cheat aura re-skins the whole environment
     if (G.sector) return G.sector.palette;
     var pals = [
       { bg1: "#081229", bg2: "#010615", grid: "rgba(0,240,255,0.10)", accent: "#00f0ff", enemy: "#ffa87d", shard: "#ffd75d" },
@@ -816,7 +925,8 @@
 
   // ================= damage =================
   function damagePlayer() {
-    if (secretFlag) return;                    // owner inert
+    var cd = cheatDef();
+    if (cd && cd.invuln) return;                    // top-tier auras never die
     if (G.state !== "playing") return;
     if (player.invuln > 0 || G.phaseUpT > 0) return;
     if (G.shield > 0) {
@@ -854,6 +964,30 @@
       particles.push({ x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(0.3, 0.8), t: 0, color: color, s: rand(1.5, 4) });
     }
   }
+  function thunderShock(cheat) {
+    if (!player || G.state !== "playing") return;
+    var cx = player.x + player.w / 2, cy = player.y + player.h / 2;
+    var kills = 0;
+    for (var i = obstacles.length - 1; i >= 0; i--) {
+      var o = obstacles[i];
+      var ox = o.x + o.w / 2, oy = o.y + o.h / 2;
+      var dx = ox - cx, dy = oy - cy;
+      if (dx * dx + dy * dy < 200 * 200) {
+        if (o.type === "splitter" && !o.splitDone) splitBlock(o);
+        burst(ox, oy, cheat.color, 8);
+        obstacles.splice(i, 1);
+        kills++;
+      }
+    }
+    burst(cx, cy, cheat.glow, 26);
+    G.shake = Math.max(G.shake, 10);
+    G.score += kills * 50 * scoreMult();
+    if (kills > 0) {
+      addPopup(cx, cy - 30, "SHOCKWAVE x" + kills, cheat.color);
+      Sfx.phaseSfx();
+    }
+  }
+
   function addPopup(x, y, text, color) {
     popups.push({ x: x, y: y, text: text, color: color, t: 0, life: 0.9 });
   }
@@ -1000,11 +1134,13 @@
   // ================= update helpers =================
   function updatePlayer(dt) {
     var x = player.x;
+    var spdCheat = cheatDef();
+    var spd = player.speed * ((spdCheat && spdCheat.speedMul) || 1);
     if (Input.pointerDown) {
       x = (Input.pointerX - view.ox) / (view.scale || 1) - player.w / 2;
     } else {
-      if (Input.keys.ArrowLeft || Input.keys.a) x -= player.speed * dt;
-      if (Input.keys.ArrowRight || Input.keys.d) x += player.speed * dt;
+      if (Input.keys.ArrowLeft || Input.keys.a) x -= spd * dt;
+      if (Input.keys.ArrowRight || Input.keys.d) x += spd * dt;
     }
     var maxX = player.laneMax || 960;
     player.x = clamp(x, 8, Math.min(960, maxX) - player.w - 8);
@@ -1100,6 +1236,32 @@
     if (G.comboT <= 0) G.combo = 0;
     G.shake = Math.max(0, G.shake - dt * 40);
     G.flash = Math.max(0, G.flash - dt);
+    // cheat-aura timers + persistent effects
+    var cheat = cheatDef();
+    if (cheat && G.state === "playing") {
+      if (cheat.shockT) {
+        cheatShockT -= dt;
+        if (cheatShockT <= 0) {
+          cheatShockT = cheat.shockT;
+          thunderShock(cheat);
+        }
+      }
+      if (cheat.regenShield) {
+        if (G.shield <= 0) {
+          cheatShieldT += dt;
+          if (cheatShieldT >= cheat.regenShield) {
+            cheatShieldT = 0;
+            G.shield = 1;
+            if (player) {
+              addPopup(player.x + player.w / 2, player.y - 10, "NAYA SHIELD", cheat.color);
+              burst(player.x + player.w / 2, player.y + player.h / 2, cheat.color, 12);
+            }
+          }
+        } else cheatShieldT = 0;
+      }
+      if (cheat.phaseCycle) cheatPhaseT += dt;
+      if (cheat.magnet) G.magnetT = Math.max(G.magnetT, 0.2);
+    }
     if (G.bannerT > 0) {
       G.bannerT -= dt;
       if (G.bannerT <= 0) bannerEl.hidden = true;
@@ -1228,11 +1390,21 @@
         continue;
       }
 
-      if (G.phaseUpT <= 0 && player.invuln <= 0 && aabb({ x: player.x, y: player.y, w: player.w, h: player.h }, ob)) {
+      var ellaPhase = (activeCheat === "ella" && cheatPhaseT % 6 < 4);
+      if (!ellaPhase && G.phaseUpT <= 0 && player.invuln <= 0 && aabb({ x: player.x, y: player.y, w: player.w, h: player.h }, ob)) {
         if (ob.type === "splitter" && !ob.splitDone) {
           splitBlock(ob);
           obstacles.splice(i, 1);
           player.invuln = Math.max(player.invuln, 0.6);
+          continue;
+        }
+        var ramCheat = cheatDef();
+        if (ramCheat && ramCheat.ram) {
+          // thunderfist rams straight through hazards for score
+          burst(ob.x + ob.w / 2, ob.y + ob.h / 2, ramCheat.color, 10);
+          obstacles.splice(i, 1);
+          G.score += 50 * scoreMult();
+          addPopup(ob.x + ob.w / 2, ob.y, "SMASH +50", ramCheat.color);
           continue;
         }
         damagePlayer();
@@ -1250,7 +1422,7 @@
           G.combo++;
           G.comboT = 2.2;
           var bonus = 25 * Math.max(1, Math.min(G.combo, 8));
-          G.score += bonus * (G.x2T > 0 ? 2 : 1);
+          G.score += bonus * scoreMult();
           addPopup(player.x + player.w / 2, player.y - 10, "GRAZE +" + bonus, "#7ce7ff");
           Sfx.graze();
         }
@@ -1277,12 +1449,21 @@
         sh.x += clamp((player.x + player.w / 2 - sh.x), -260 * dt, 260 * dt);
         sh.y += clamp((player.y - sh.y), -260 * dt, 260 * dt);
       }
+      var vacCheat = cheatDef();
+      if (vacCheat && vacCheat.vacuum && player) {
+        // kwoffie solar vacuum: long-range shard pull
+        var vdx = (player.x + player.w / 2) - sh.x, vdy = player.y - sh.y;
+        if (vdx * vdx + vdy * vdy < vacCheat.vacuum * vacCheat.vacuum) {
+          sh.x += clamp(vdx, -340 * dt, 340 * dt);
+          sh.y += clamp(vdy, -340 * dt, 340 * dt);
+        }
+      }
       sh.y += sh.vy * dt * speedScale;
       if (sh.y > 560) { shardItems.splice(j, 1); continue; }
       if (aabb({ x: player.x, y: player.y, w: player.w, h: player.h }, sh)) {
         shardItems.splice(j, 1);
         G.shards++;
-        G.score += 100 * (G.x2T > 0 ? 2 : 1);
+        G.score += 100 * scoreMult();
         addPopup(sh.x, sh.y, "SHARD " + G.shards, "#ffd75d");
         burst(sh.x, sh.y, "#ffd75d", 8);
         Sfx.pickup();
@@ -1309,7 +1490,8 @@
         bl.x += bl.vx * dt * speedScale;
         bl.y += bl.vy * dt * speedScale;
         if (bl.x < -20 || bl.x > 980 || bl.y < -20 || bl.y > 560) { bullets.splice(bi, 1); continue; }
-        if (player.invuln <= 0 && G.phaseUpT <= 0) {
+        var ellaDodge = (activeCheat === "ella" && cheatPhaseT % 6 < 4);
+        if (!ellaDodge && player.invuln <= 0 && G.phaseUpT <= 0) {
           var dx = (player.x + player.w / 2) - bl.x;
           var dy = (player.y + player.h / 2) - bl.y;
           if (dx * dx + dy * dy < (bl.r + 14) * (bl.r + 14)) {
@@ -1322,7 +1504,7 @@
     }
 
     // score tick
-    var mult = (G.x2T > 0 || G.overT > 0) ? 2 : 1;
+    var mult = scoreMult();
     G.score += dt * 30 * mult;
 
     // particles / popups
@@ -1359,6 +1541,8 @@
     } else if (G.mode === "multiplayer") {
       mid = "RACE · " + G.elapsed.toFixed(1) + "s" + (G.elapsed > 90 ? " · SUDDEN DEATH" : "");
     } else mid = "—";
+    var hudCheat = cheatDef();
+    if (hudCheat && mid !== "—") mid = "⚡" + hudCheat.tag + " · " + mid;
     hudMidVal.textContent = mid;
     hudScore.textContent = Math.floor(G.score);
   }
@@ -1419,18 +1603,22 @@
   }
 
   function drawShip(s, label) {
+    var cheatTrail = (s === player) ? cheatDef() : null;
     for (var i = 0; i < s.trail.length; i++) {
       var t = s.trail[i];
       t.t -= 0.016;
       var a = t.t < 0 ? 0 : t.t;
-      ctx.fillStyle = "rgba(0,240,255," + (a * 0.5) + ")";
+      ctx.fillStyle = cheatTrail ? "rgba(" + cheatTrail.trail + "," + (a * 0.5) + ")"
+        : "rgba(0,240,255," + (a * 0.5) + ")";
       ctx.fillRect(t.x - 3, t.y, 6, 8);
     }
     if (s.invuln > 0 && Math.floor(performance.now() / 90) % 2 === 0) return;
 
     ctx.save();
     if (G.phaseUpT > 0) ctx.globalAlpha = 0.45;
-    if (secretFlag) { ctx.shadowColor = "#7cf7ff"; ctx.shadowBlur = 24; }
+    else if (activeCheat === "ella" && s === player && cheatPhaseT % 6 < 4) ctx.globalAlpha = 0.45;
+    if (cheatTrail && s === player) { ctx.shadowColor = cheatTrail.glow; ctx.shadowBlur = 26; }
+    else if (cheatTrail) { ctx.shadowColor = s.color; ctx.shadowBlur = 18; }
     else { ctx.shadowColor = s.color; ctx.shadowBlur = 18; }
     ctx.fillStyle = s.color;
     roundRect(s.x, s.y, s.w, s.h, 9);
@@ -1716,10 +1904,13 @@
       ctx.fillStyle = "rgba(255,43,214," + (G.flash * 0.7) + ")";
       ctx.fillRect(0, 0, 960, 540);
     }
-    if (secretFlag) {
-      ctx.strokeStyle = "rgba(124,247,255,0.55)";
+    var cdFrame = cheatDef();
+    if (cdFrame) {
+      ctx.strokeStyle = cdFrame.color;
+      ctx.globalAlpha = 0.55;
       ctx.lineWidth = 4;
       ctx.strokeRect(4, 4, 952, 532);
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -1760,6 +1951,7 @@
     }
     var keyName = k.length === 1 ? k.toLowerCase() : k;
     Input.keys[keyName] = true;
+    var swallow = (k.length === 1) && cheatSwallow(keyName);
     noteKey(k.length === 1 ? k : "");
 
     if (k === " " || k === "Spacebar") {
@@ -1767,6 +1959,7 @@
       else if (G.state === "paused") togglePause(false);
       return;
     }
+    if (swallow) return;   // mid cheat-word: don't pause/mute/fullscreen (kiphnic, kwoffie)
     if (k === "p" || k === "P" || k === "Escape") { togglePause(); return; }
     if (k === "m" || k === "M") { Sfx.toggle(); return; }
     if (k === "f" || k === "F") { toggleFullscreen(); return; }
