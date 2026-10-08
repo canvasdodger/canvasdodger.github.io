@@ -115,6 +115,27 @@
     banner: function () { this.tone(440, 0.16, "square", 0.04, 660); },
     win: function () { this.tone(520, 0.5, "triangle", 0.05, 1040); },
     lose: function () { this.tone(240, 0.6, "sawtooth", 0.05, 70); },
+    // chord/arpeggio scheduler: notes = [freq, dur, type, gain, slideTo, delayMs]
+    jingle: function (notes) {
+      var self = this;
+      (notes || []).forEach(function (n) {
+        var delay = n[5] || 0;
+        setTimeout(function () { self.tone(n[0], n[1], n[2], n[3], n[4]); }, delay);
+      });
+    },
+    // signature fanfare per cheat aura id (null = power-down)
+    cheat: function (id) {
+      var J = CHEAT_JINGLES[id];
+      if (!id || !J) { this.tone(700, 0.08, "sine", 0.025, 420); return; }
+      this.jingle(J);
+    },
+    shock: function () {
+      this.tone(150, 0.25, "sawtooth", 0.06, 50);
+      this.tone(1200, 0.15, "square", 0.035, 2400);
+    },
+    shieldRegen: function () { this.tone(660, 0.22, "sine", 0.04, 990); },
+    phaseShift: function () { this.tone(500, 0.12, "sine", 0.018, 1000); },
+    lifeGift: function () { this.tone(520, 0.3, "triangle", 0.05, 1040); },
     toggle: function () {
       this.muted = !this.muted;
       Store.set(K.mute, this.muted);
@@ -172,8 +193,45 @@
   var cheatShockT = 0;         // thunderfist shockwave timer
   var cheatShieldT = 0;        // naya regen timer
   var cheatPhaseT = 0;         // ella phase clock
+  var cheatPhaseWasDodge = false; // ella veil edge (sound only on shift)
   var cheatLifeGiven = false;  // kwoffie +1 life, once per run (no farm)
   var ghostDotT = 0;
+
+  // signature fanfares: [freq, dur, type, gain, slideTo, delayMs]
+  // thunderfist = storm strike, kiphnic = void-god rise, kwoffie = solar bloom,
+  // zee = speedster zip, naya = guardian swell, ella = phantom shimmer
+  var CHEAT_JINGLES = {
+    thunderfist: [
+      [110, 0.3, "sawtooth", 0.06, 55, 0],
+      [880, 0.12, "square", 0.05, 1760, 60],
+      [1320, 0.2, "square", 0.05, 660, 180]
+    ],
+    kiphnic: [
+      [220, 0.25, "sine", 0.05, 440, 0],
+      [440, 0.25, "sine", 0.05, 880, 120],
+      [880, 0.35, "triangle", 0.055, 1760, 240]
+    ],
+    kwoffie: [
+      [330, 0.18, "triangle", 0.05, 495, 0],
+      [495, 0.18, "triangle", 0.05, 660, 110],
+      [660, 0.3, "triangle", 0.055, 1320, 220]
+    ],
+    zee: [
+      [500, 0.08, "square", 0.04, 1000, 0],
+      [750, 0.08, "square", 0.04, 1500, 70],
+      [1000, 0.14, "square", 0.045, 2000, 140]
+    ],
+    naya: [
+      [392, 0.22, "sine", 0.05, 392, 0],
+      [523, 0.22, "sine", 0.05, 523, 130],
+      [784, 0.3, "triangle", 0.05, 784, 260]
+    ],
+    ella: [
+      [700, 0.16, "sine", 0.04, 350, 0],
+      [500, 0.16, "sine", 0.04, 1000, 110],
+      [900, 0.24, "triangle", 0.04, 450, 220]
+    ]
+  };
 
   function cheatDef() { return activeCheat ? CHEATS[activeCheat] : null; }
 
@@ -221,12 +279,14 @@
     cheatShockT = (def && def.shockT) || 0;
     cheatShieldT = 0;
     cheatPhaseT = 0;
+    cheatPhaseWasDodge = !!(def && def.phaseCycle); // start in dodge so first shift plays
     if (player) {
       if (def) {
         player.color = def.ship;
         if (def.bonusLife && G.state === "playing" && !cheatLifeGiven) {
           cheatLifeGiven = true;
           G.lives = Math.min(5, G.lives + 1);
+          Sfx.lifeGift();
         }
       } else {
         // aura off: restore the ship's natural color for this mode/sector
@@ -240,7 +300,7 @@
   }
 
   function cheatFanfare(def) {
-    if (!def) { Sfx.tone(700, 0.06, "sine", 0.02); return; }
+    if (!def) { Sfx.cheat(null); return; }
     G.flash = 0.5;
     G.shake = 14;
     if (player) {
@@ -248,8 +308,7 @@
       addPopup(player.x + player.w / 2, player.y - 16, def.title, def.color);
     }
     showBanner("⚡ " + def.title + " ⚡", 2.0);
-    Sfx.tone(880, 0.12, "square", 0.05, 1760);
-    setTimeout(function () { Sfx.tone(1320, 0.2, "triangle", 0.05, 2640); }, 120);
+    Sfx.cheat(activeCheat);
   }
 
   function flashCheatDot() {
@@ -982,9 +1041,9 @@
     burst(cx, cy, cheat.glow, 26);
     G.shake = Math.max(G.shake, 10);
     G.score += kills * 50 * scoreMult();
+    Sfx.shock();
     if (kills > 0) {
       addPopup(cx, cy - 30, "SHOCKWAVE x" + kills, cheat.color);
-      Sfx.phaseSfx();
     }
   }
 
@@ -1256,10 +1315,18 @@
               addPopup(player.x + player.w / 2, player.y - 10, "NAYA SHIELD", cheat.color);
               burst(player.x + player.w / 2, player.y + player.h / 2, cheat.color, 12);
             }
+            Sfx.shieldRegen();
           }
         } else cheatShieldT = 0;
       }
-      if (cheat.phaseCycle) cheatPhaseT += dt;
+      if (cheat.phaseCycle) {
+        cheatPhaseT += dt;
+        var dodgeNow = (cheatPhaseT % 6 < 4);
+        if (dodgeNow !== cheatPhaseWasDodge) {
+          cheatPhaseWasDodge = dodgeNow;
+          Sfx.phaseShift();
+        }
+      }
       if (cheat.magnet) G.magnetT = Math.max(G.magnetT, 0.2);
     }
     if (G.bannerT > 0) {
