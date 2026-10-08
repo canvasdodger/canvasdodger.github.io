@@ -108,8 +108,8 @@
       o.start(t); o.stop(t + dur + 0.02);
     },
     blip: function () { this.tone(720, 0.07, "square", 0.03); },
-    pickup: function () { this.tone(560, 0.12, "triangle", 0.05, 1120); },
-    graze: function () { this.tone(980, 0.05, "sine", 0.025); },
+    pickup: function () { this.tone(560 * cheatPitch(), 0.12, "triangle", 0.05, 1120 * cheatPitch()); },
+    graze: function () { this.tone(980 * cheatPitch(), 0.05, "sine", 0.025); },
     hit: function () { this.tone(180, 0.28, "sawtooth", 0.06, 60); },
     phaseSfx: function () { this.tone(300, 0.3, "triangle", 0.05, 900); },
     banner: function () { this.tone(440, 0.16, "square", 0.04, 660); },
@@ -136,10 +136,55 @@
     shieldRegen: function () { this.tone(660, 0.22, "sine", 0.04, 990); },
     phaseShift: function () { this.tone(500, 0.12, "sine", 0.018, 1000); },
     lifeGift: function () { this.tone(520, 0.3, "triangle", 0.05, 1040); },
+    // ---- ambient aura drone: one soft looping voice per cheat, started/stopped with the aura
+    drone: null, // { osc, osc2, gain, id }
+    droneStart: function (id) {
+      this.droneStop();
+      var D = CHEAT_DRONES[id];
+      if (!D) return;
+      var c = this.ensure(); if (!c) return;
+      try {
+        var o1 = c.createOscillator(), o2 = c.createOscillator(), g = c.createGain();
+        o1.type = D.wave || "sine"; o2.type = D.wave || "sine";
+        o1.frequency.setValueAtTime(D.f1, c.currentTime);
+        o2.frequency.setValueAtTime(D.f2, c.currentTime);
+        g.gain.setValueAtTime(0.0001, c.currentTime);
+        g.gain.exponentialRampToValueAtTime(D.gain || 0.014, c.currentTime + 1.2);
+        o1.connect(g); o2.connect(g); g.connect(c.destination);
+        o1.start(); o2.start();
+        this.drone = { osc: o1, osc2: o2, gain: g, id: id };
+      } catch (e) { this.drone = null; }
+    },
+    droneStop: function () {
+      var d = this.drone; this.drone = null;
+      if (!d) return;
+      try {
+        var c = this.ctx, t = c ? c.currentTime : 0;
+        d.gain.gain.cancelScheduledValues(t);
+        d.gain.gain.setValueAtTime(Math.max(0.0001, d.gain.gain.value), t);
+        d.gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+        var o1 = d.osc, o2 = d.osc2;
+        setTimeout(function () { try { o1.stop(); o2.stop(); } catch (e2) {} }, 450);
+      } catch (e) {}
+    },
+    // pause keeps the aura but ducks the hum; resume brings it back
+    droneDuck: function (ducked) {
+      var d = this.drone;
+      if (!d || !this.ctx) return;
+      try {
+        var t = this.ctx.currentTime;
+        var full = 0.014;
+        try { if (CHEAT_DRONES[d.id] && CHEAT_DRONES[d.id].gain) full = CHEAT_DRONES[d.id].gain; } catch (e2) {}
+        d.gain.gain.cancelScheduledValues(t);
+        d.gain.gain.setValueAtTime(Math.max(0.0001, d.gain.gain.value), t);
+        d.gain.gain.exponentialRampToValueAtTime(ducked ? 0.0001 : full, t + 0.3);
+      } catch (e) {}
+    },
     toggle: function () {
       this.muted = !this.muted;
       Store.set(K.mute, this.muted);
-      if (!this.muted) this.blip();
+      if (this.muted) this.droneStop();
+      else { this.blip(); if (activeCheat) this.droneStart(activeCheat); }
       syncMuteBtns();
     }
   };
@@ -235,6 +280,28 @@
 
   function cheatDef() { return activeCheat ? CHEATS[activeCheat] : null; }
 
+  // ambient drone voices (dual detuned oscillators) + possessed pickup/graze pitch per aura
+  var CHEAT_DRONES = {
+    thunderfist: { f1: 55, f2: 82.5, wave: "sawtooth", gain: 0.008 },
+    kiphnic:     { f1: 110, f2: 165, wave: "sine", gain: 0.016 },
+    kwoffie:     { f1: 130.8, f2: 196, wave: "triangle", gain: 0.014 },
+    zee:         { f1: 220, f2: 330, wave: "square", gain: 0.006 },
+    naya:        { f1: 196, f2: 261.6, wave: "sine", gain: 0.015 },
+    ella:        { f1: 174.6, f2: 261.6, wave: "sine", gain: 0.012 }
+  };
+  var CHEAT_PITCH = {
+    thunderfist: 0.85,
+    kiphnic: 1.3,
+    kwoffie: 1.15,
+    zee: 1.5,
+    naya: 1.0,
+    ella: 0.7
+  };
+  function cheatPitch() {
+    if (!activeCheat) return 1;
+    return CHEAT_PITCH[activeCheat] || 1;
+  }
+
   // unified score multiplier: pickup x2 * cheat aura (kiphnic 2x, kwoffie 3x, zee 1.25x)
   function scoreMult() {
     var m = (G.x2T > 0 || G.overT > 0) ? 2 : 1;
@@ -297,6 +364,8 @@
     }
     flashCheatDot();
     cheatFanfare(def);
+    if (def) Sfx.droneStart(activeCheat);
+    else Sfx.droneStop();
   }
 
   function cheatFanfare(def) {
@@ -582,7 +651,9 @@
     cheatShockT = (activeCheat && CHEATS[activeCheat].shockT) || 0;
     cheatShieldT = 0;
     cheatPhaseT = 0;
+    cheatPhaseWasDodge = !!(activeCheat && CHEATS[activeCheat].phaseCycle);
     cheatLifeGiven = false;
+    if (activeCheat) Sfx.droneStart(activeCheat); else Sfx.droneStop();
     G.won = false;
     G.seed = (Math.random() * 0xffffffff) >>> 0;
     G.rng = makeRng(G.seed);
@@ -706,6 +777,7 @@
     var pause = force != null ? force : G.state === "playing";
     if (pause) {
       G.state = "paused";
+      Sfx.droneDuck(true);
       hudStatus.textContent = "PAUSED";
       showOverlay(
         '<h2>PAUSED</h2><div class="btn-row">' +
@@ -717,6 +789,7 @@
       G.state = "playing";
       hudStatus.textContent = "LIVE";
       hideOverlay();
+      Sfx.droneDuck(false);
       lastT = performance.now();
     }
   }
@@ -1068,6 +1141,7 @@
   function winRun() {
     G.state = "over";
     G.won = true;
+    Sfx.droneStop();
     Sfx.win();
     G.flash = 0.5;
 
@@ -1133,6 +1207,7 @@
 
   function loseRun() {
     G.state = "over";
+    Sfx.droneStop();
     Sfx.lose();
     var sc = Math.floor(G.score);
 
@@ -2095,6 +2170,7 @@
   // ================= navigation / buttons =================
   function goHome() {
     stopLoop();
+    Sfx.droneStop();
     G.state = "idle";
     hideOverlay();
     bannerEl.hidden = true;
@@ -2104,6 +2180,7 @@
 
   function goLobby() {
     stopLoop();
+    Sfx.droneStop();
     G.state = "idle";
     hideOverlay();
     bannerEl.hidden = true;
