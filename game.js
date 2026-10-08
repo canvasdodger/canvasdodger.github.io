@@ -296,6 +296,21 @@
       objective: { type: "boss", need: 3, time: 70 },
       pattern: "boss", speedMul: 1.2,
       palette: { bg1: "#2a0a06", bg2: "#0d0201", grid: "rgba(255,100,60,0.12)", accent: "#ff643c", enemy: "#ffb454", shard: "#ffd75d" } },
+    { id: 7, code: "S07", name: "SOLAR WINDS",
+      story: "Stellar gales tear across the lane. Gust fronts shove your ship sideways — read the arrows, lean into the calm, survive the storm.",
+      objective: { type: "survive", time: 50 },
+      pattern: "winds", speedMul: 1.3,
+      palette: { bg1: "#0a1a33", bg2: "#02060f", grid: "rgba(0,200,255,0.14)", accent: "#4dd8ff", enemy: "#9adcff", shard: "#ffd75d" } },
+    { id: 8, code: "S08", name: "MIRROR SPLIT",
+      story: "Prism shards incoming — big blocks fracture into twin seekers when grazed or blasted. Collect 8 shards in the hall of mirrors.",
+      objective: { type: "shards", need: 8, time: 55 },
+      pattern: "splitters", speedMul: 1.25,
+      palette: { bg1: "#1c0f33", bg2: "#070313", grid: "rgba(255,124,231,0.14)", accent: "#ff7ce7", enemy: "#c9a7ff", shard: "#7ce7ff" } },
+    { id: 9, code: "S09", name: "EVENT HORIZON",
+      story: "The void has teeth. Rift portals blink open in pairs — fly through to teleport, but beware the singularity pull at the center. Graze 15 to collapse the horizon.",
+      objective: { type: "graze", need: 15, time: 60 },
+      pattern: "portals", speedMul: 1.35,
+      palette: { bg1: "#050014", bg2: "#000000", grid: "rgba(120,80,255,0.16)", accent: "#8a5dff", enemy: "#ff5d8a", shard: "#ffd75d" } },
     { id: 6, code: "S06", name: "NULL PROTOCOL",
       story: "Classified. Everything at once. Survive 90 seconds in the void.",
       objective: { type: "survive", time: 90 },
@@ -355,6 +370,15 @@
     }
   })();
 
+  function sectorById(id) {
+    for (var i = 0; i < SECTORS.length; i++) if (SECTORS[i].id === id) return SECTORS[i];
+    return SECTORS[0];
+  }
+  function nullSector() {
+    for (var i = 0; i < SECTORS.length; i++) if (SECTORS[i].secret) return SECTORS[i];
+    return SECTORS[SECTORS.length - 1];
+  }
+
   function makeShip(x, color) {
     return { x: x, y: 470, w: 54, h: 26, speed: 560, color: color, invuln: 0, trail: [] };
   }
@@ -362,7 +386,7 @@
   function tierMax() {
     if (G.mode === "classic" || G.mode === "null") {
       var sid = G.sector ? G.sector.id : 1;
-      if (sid >= 5) return 3;
+      if (sid === 6 || sid >= 7) return 3;   // null + S07+ get full arsenal
       if (sid >= 3) return 2;
       return 1;
     }
@@ -404,13 +428,13 @@
 
     if (mode === "classic" || mode === "null") {
       if (mode === "null") {
-        G.sector = SECTORS[5];
+        G.sector = nullSector();
       } else {
         var campIds = campaignSectors().map(function (s) { return s.id; });
         var maxUnlock = campIds.length ? campIds[campIds.length - 1] : 5;
         var sid = opts.sector || Math.min(prog.unlocked, maxUnlock);
         if (campIds.indexOf(sid) < 0) sid = campIds[0];
-        G.sector = SECTORS[sid - 1];
+        G.sector = sectorById(sid);
       }
       G.lives = 3;
       G.timeLeft = G.sector.objective.time;
@@ -608,9 +632,53 @@
       addBlock(fromLeft ? -sz : 960, 60 + r() * 260, sz, sz, 60, pal.enemy, {
         type: "block", vx: (fromLeft ? 1 : -1) * (140 + r() * 90), vy: 40 + r() * 60
       });
+    } else if (pattern === "winds") {
+      // S07 SOLAR WINDS: falling shards + telegraphed gust fronts that shove the ship
+      var wc = 1 + ((r() * 2) | 0);
+      for (var wi = 0; wi < wc; wi++) {
+        var wsize = 24 + r() * 30;
+        addBlock(r() * (960 - wsize), -wsize - r() * 60, wsize, wsize, blockSpeed(), pal.enemy);
+      }
+      var dir = r() < 0.5 ? -1 : 1;
+      var strength = 240 + r() * 160;
+      var bandY = -30;
+      obstacles.push({ x: 0, y: bandY, w: 960, h: 46, vy: blockSpeed() * 0.85, vx: 0,
+        type: "gust", color: pal.accent, grazed: true,
+        gustDir: dir, gustForce: strength });
+    } else if (pattern === "splitters") {
+      // S08 MIRROR SPLIT: big prisms fall; when split they fracture into twin seekers
+      var sc3 = 1 + ((r() * 2) | 0);
+      for (var si = 0; si < sc3; si++) {
+        var big = 44 + r() * 22;
+        addBlock(r() * (960 - big), -big - r() * 50, big, big, blockSpeed() * 0.9, pal.enemy,
+          { type: "splitter", splitDone: false });
+      }
+      if (r() < 0.4) {
+        var sz2 = 26 + r() * 20;
+        addBlock(r() * (960 - sz2), -sz2 - r() * 40, sz2, sz2, blockSpeed(), pal.enemy);
+      }
+    } else if (pattern === "portals") {
+      // S09 EVENT HORIZON: rain + portal pairs (fly through to teleport) + center pull handled in update
+      var pc = 1 + ((r() * 2) | 0);
+      for (var qi = 0; qi < pc; qi++) {
+        var psize = 26 + r() * 30;
+        addBlock(r() * (960 - psize), -psize - r() * 50, psize, psize, blockSpeed(), pal.enemy);
+      }
+      if (G.portalT == null) G.portalT = 0;
+      G.portalT -= 1;
+      if (G.portalT <= 0) {
+        G.portalT = 3;
+        var px1 = 80 + r() * 320, px2 = 560 + r() * 320;
+        var py = -30;
+        var pair = (Math.random() * 0xffffff) | 0;
+        obstacles.push({ x: px1, y: py, w: 54, h: 54, vy: blockSpeed() * 0.55, vx: 0,
+          type: "portal", color: pal.accent, grazed: true, portalPair: pair });
+        obstacles.push({ x: px2, y: py - 130, w: 54, h: 54, vy: blockSpeed() * 0.55, vx: 0,
+          type: "portal", color: pal.accent, grazed: true, portalPair: pair });
+      }
     } else if (pattern === "mix") {
-      var which = (r() * 4) | 0;
-      spawnPattern(["rain", "walls", "homing", "crossfire"][which], r);
+      var which = (r() * 7) | 0;
+      spawnPattern(["rain", "walls", "homing", "crossfire", "winds", "splitters", "portals"][which], r);
     }
   }
 
@@ -630,6 +698,30 @@
 
   function spawnShard() {
     shardItems.push({ x: rand(30, 930), y: -16, w: 18, h: 18, vy: 150 });
+  }
+
+  // ================= special hazards: S07 winds / S08 split / S09 portals =================
+  function splitBlock(ob) {
+    if (ob.splitDone) return;
+    ob.splitDone = true;
+    var cx = ob.x + ob.w / 2, cy = ob.y + ob.h / 2;
+    var pal = paletteNow();
+    for (var sk = -1; sk <= 1; sk += 2) {
+      obstacles.push({ x: clamp(cx - 15 + sk * 26, 4, 920), y: cy - 14, w: 30, h: 30,
+        vy: ob.vy * 1.15, vx: sk * 70, type: "homing", color: pal.enemy, grazed: false,
+        homeT: 1.4, seeker: true });
+    }
+    burst(cx, cy, pal.accent, 14);
+    Sfx.tone(880, 0.12, "triangle", 0.04, 440);
+    addPopup(cx, cy - 12, "SPLIT!", pal.accent);
+  }
+
+  function portalMate(ob) {
+    for (var mi = 0; mi < obstacles.length; mi++) {
+      var mo = obstacles[mi];
+      if (mo !== ob && mo.type === "portal" && mo.portalPair === ob.portalPair) return mo;
+    }
+    return null;
   }
 
   // ================= boss (S05) =================
@@ -709,8 +801,10 @@
     else if (kind === "blast") {
       for (var i = 0; i < obstacles.length; i++) {
         burst(obstacles[i].x + obstacles[i].w / 2, obstacles[i].y + obstacles[i].h / 2, "#ff9a5d", 6);
+        if (obstacles[i].type === "splitter" && !obstacles[i].splitDone) splitBlock(obstacles[i]);
       }
-      obstacles = [];
+      // keep seekers from a blast-fracture; clear everything else
+      obstacles = obstacles.filter(function (o) { return o.seeker && o.homeT > 0; });
       G.shake = 10;
       Sfx.phaseSfx();
     }
@@ -1063,6 +1157,14 @@
       speedScale *= 1 + Math.floor((G.elapsed - 90) / 10) * 0.5;   // sudden death
     }
 
+    // S09 singularity: gentle center pull in EVENT HORIZON
+    var singularity = (G.sector && G.sector.pattern === "portals");
+    if (singularity && player && G.state === "playing") {
+      var pullX = 480 - (player.x + player.w / 2);
+      player.x += clamp(pullX * 0.35 * dt, -60 * dt, 60 * dt);
+      player.x = clamp(player.x, 8, 960 - player.w - 8);
+    }
+
     // obstacles
     for (var i = obstacles.length - 1; i >= 0; i--) {
       var ob = obstacles[i];
@@ -1080,10 +1182,59 @@
       ob.x += (ob.vx || 0) * dt;
       if (ob.x < 0 && ob.vx) { ob.x = 0; ob.vx *= -1; }
       if (ob.x + ob.w > 960 && ob.vx) { ob.x = 960 - ob.w; ob.vx *= -1; }
-      if (ob.y > 560 + ob.h) { obstacles.splice(i, 1); continue; }
+      if (ob.y > 560 + ob.h) {
+        // splitters that fall off-screen still fracture (keeps S08 pressure on)
+        if (ob.type === "splitter" && !ob.splitDone && ob.y < 640 + ob.h) splitBlock(ob);
+        obstacles.splice(i, 1); continue;
+      }
       if (ob.type === "warn") continue;
 
+      // S07 gust fronts: shove the ship sideways while overlapping (no damage)
+      if (ob.type === "gust") {
+        if (player && player.invuln <= 0) {
+          var pover = player.x + player.w > ob.x && player.x < ob.x + ob.w &&
+            player.y + player.h > ob.y && player.y < ob.y + ob.h;
+          if (pover) {
+            player.x += ob.gustDir * ob.gustForce * dt;
+            player.x = clamp(player.x, 8, 960 - player.w - 8);
+            if (!ob.gustFx || performance.now() - ob.gustFx > 240) {
+              ob.gustFx = performance.now();
+              burst(player.x + player.w / 2, player.y, paletteNow().accent, 3);
+            }
+          }
+        }
+        continue;
+      }
+
+      // S09 portals: overlapping teleports the ship to the mate (brief invuln, no damage)
+      if (ob.type === "portal") {
+        if (player && player.invuln <= 0 && G.phaseUpT <= 0) {
+          var qover = player.x + player.w > ob.x && player.x < ob.x + ob.w &&
+            player.y + player.h > ob.y && player.y < ob.y + ob.h;
+          if (qover) {
+            var mate = portalMate(ob);
+            if (mate) {
+              player.x = clamp(mate.x + mate.w / 2 - player.w / 2, 8, 960 - player.w - 8);
+              player.y = clamp(mate.y - player.h - 6, 60, 500);
+              player.invuln = Math.max(player.invuln, 0.9);
+              burst(player.x + player.w / 2, player.y, paletteNow().accent, 16);
+              addPopup(player.x + player.w / 2, player.y - 10, "RIFT!", paletteNow().accent);
+              Sfx.phaseSfx();
+              obstacles.splice(i, 1);
+              continue;
+            }
+          }
+        }
+        continue;
+      }
+
       if (G.phaseUpT <= 0 && player.invuln <= 0 && aabb({ x: player.x, y: player.y, w: player.w, h: player.h }, ob)) {
+        if (ob.type === "splitter" && !ob.splitDone) {
+          splitBlock(ob);
+          obstacles.splice(i, 1);
+          player.invuln = Math.max(player.invuln, 0.6);
+          continue;
+        }
         damagePlayer();
         if (G.state === "over") return;
       }
@@ -1093,6 +1244,7 @@
         var nearY = ob.y + ob.h > player.y - 26 && ob.y < player.y + player.h + 26;
         var noHit = !(overlapX && ob.y < player.y + player.h && ob.y + ob.h > player.y);
         if (overlapX && nearY && noHit) {
+          if (ob.type === "splitter" && !ob.splitDone) splitBlock(ob);
           ob.grazed = true;
           G.graze++;
           G.combo++;
@@ -1303,7 +1455,8 @@
     }
   }
 
-  function drawObstacles() {
+  function drawObstacles(time) {
+    var now = time || 0;
     for (var i = 0; i < obstacles.length; i++) {
       var o = obstacles[i];
       if (o.type === "warn") {
@@ -1314,17 +1467,91 @@
         ctx.setLineDash([]);
         continue;
       }
+      if (o.type === "gust") {
+        // S07: translucent wind band with animated chevrons pointing the shove direction
+        ctx.save();
+        ctx.globalAlpha = 0.28;
+        ctx.fillStyle = o.color;
+        ctx.fillRect(o.x, o.y, o.w, o.h);
+        ctx.globalAlpha = 0.9;
+        ctx.strokeStyle = o.color;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = o.color;
+        ctx.shadowBlur = 12;
+        var step = 64;
+        var slide = (now * 0.25 * o.gustDir) % step;
+        for (var gx = -step + slide; gx < 960 + step; gx += step) {
+          var gy = o.y + o.h / 2;
+          ctx.beginPath();
+          if (o.gustDir > 0) {
+            ctx.moveTo(gx - 12, gy - 12); ctx.lineTo(gx + 4, gy); ctx.lineTo(gx - 12, gy + 12);
+          } else {
+            ctx.moveTo(gx + 12, gy - 12); ctx.lineTo(gx - 4, gy); ctx.lineTo(gx + 12, gy + 12);
+          }
+          ctx.stroke();
+        }
+        ctx.restore();
+        continue;
+      }
+      if (o.type === "portal") {
+        // S09: swirling rift ring
+        ctx.save();
+        var pcx = o.x + o.w / 2, pcy = o.y + o.h / 2;
+        ctx.strokeStyle = o.color;
+        ctx.shadowColor = o.color;
+        ctx.shadowBlur = 22;
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(pcx, pcy, 22 + Math.sin(now * 0.008) * 3, 0, TAU);
+        ctx.stroke();
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.75;
+        ctx.beginPath();
+        ctx.arc(pcx, pcy, 12, now * 0.004, now * 0.004 + TAU * 0.8);
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
       ctx.save();
       ctx.shadowColor = o.color;
-      ctx.shadowBlur = 10;
+      ctx.shadowBlur = o.type === "splitter" ? 18 : 10;
       ctx.fillStyle = o.color;
-      roundRect(o.x, o.y, o.w, o.h, o.type === "wall" ? 4 : 8);
+      if (o.type === "splitter") {
+        // S08: prism — diamond outline hinting it fractures
+        ctx.translate(o.x + o.w / 2, o.y + o.h / 2);
+        ctx.rotate(Math.PI / 4);
+        var half = o.w / 2;
+        ctx.fillRect(-half * 0.72, -half * 0.72, half * 1.44, half * 1.44);
+        ctx.rotate(-Math.PI / 4);
+        ctx.strokeStyle = "rgba(255,255,255,0.85)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-half * 0.5, 0); ctx.lineTo(half * 0.5, 0);
+        ctx.stroke();
+      } else {
+        roundRect(o.x, o.y, o.w, o.h, o.type === "wall" ? 4 : 8);
+      }
       if (o.type === "homing") {
-        ctx.fillStyle = "#fff";
+        ctx.fillStyle = o.seeker ? "#ff7ce7" : "#fff";
         ctx.beginPath();
         ctx.arc(o.x + o.w / 2, o.y + o.h / 2, 5, 0, TAU);
         ctx.fill();
       }
+      ctx.restore();
+    }
+    // S09 singularity marker at lane center
+    if (G.sector && G.sector.pattern === "portals" && (G.state === "playing" || G.state === "briefing")) {
+      ctx.save();
+      ctx.globalAlpha = 0.5 + Math.sin(now * 0.005) * 0.15;
+      ctx.fillStyle = "#0a0618";
+      ctx.strokeStyle = "#8a5dff";
+      ctx.shadowColor = "#8a5dff";
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(480, 120, 14, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
       ctx.restore();
     }
   }
@@ -1458,7 +1685,7 @@
 
     drawBackground(time, pal);
     drawPickups(time);
-    drawObstacles();
+    drawObstacles(time);
     drawBoss(time);
     drawShip(player, null);
     if (G.bot && G.bot.alive) {
