@@ -1,5 +1,7 @@
 # Canvas Dodger // NEON PROTOCOL
 
+> **▶ PLAY NOW:** https://kwoffiekiphnic7-cmyk.github.io/canvas-dodger/
+
 Futuristic static canvas dodger. No build, no assets — just `index.html` + `style.css` + `game.js`.
 
 ## Modes
