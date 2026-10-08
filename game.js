@@ -30,7 +30,8 @@
     bestEndless: "dodger_best_endless_v1",
     botWins: "dodger_bot_wins_v1",
     bestNull: "dodger_best_null_v1",
-    mute: "dodger_mute_v1"
+    mute: "dodger_mute_v1",
+    tutorial: "dodger_tutorial_v1"
   };
 
   // per-bot win keys (v2); legacy single counter migrates to easy
@@ -567,11 +568,15 @@
     $("#metaNull").textContent = "BEST — " + Store.get(K.bestNull, 0);
     var nullCard = $("#cardNull");
     if (nullCard) nullCard.hidden = !prog.nullUnlocked;
+    var tut = Store.get(K.tutorial, { done: false });
+    var tutMeta = $("#metaTutorial");
+    if (tutMeta) tutMeta.textContent = (tut && tut.done) ? "GRADUATED ✓" : "NOT GRADUATED";
   }
 
   function route() {
     var h = (location.hash || "").replace(/^#\/?/, "");
     if (h === "classic") { showScreen("game"); startMode("classic"); }
+    else if (h === "tutorial") { showScreen("game"); startTutorial(); }
     else if (h === "endless") { showScreen("game"); startMode("endless"); }
     else if (h === "multiplayer") { stopLoop(); G.state = "idle"; hideOverlay(); bannerEl.hidden = true; showScreen("lobby"); refreshHome(); }
     else if (h === "null") {
@@ -800,6 +805,22 @@
       return;
     }
 
+    if (mode === "tutorial") {
+      // flight school: safe sandbox, scripted steps drive the lesson
+      G.sector = null;
+      G.lives = 99;
+      G.timeLeft = 0;
+      G.spawnGap = 1.1;
+      G.phaseIdx = 0;
+      G.phaseClock = 0;
+      G.ghostScore = true;   // tutorial never touches ranks/bests
+      player = makeShip(453, cheatShipColor("#5dff9a"));
+      showScreen("game");
+      startTutorialSteps();
+      beginPlay();
+      return;
+    }
+
     if (mode === "multiplayer") {
       G.sector = null;
       G.lives = 1;
@@ -823,6 +844,101 @@
       showScreen("game");
       beginPlay();
     }
+  }
+
+  // ================= tutorial (flight school) =================
+  // 5 hands-on steps in a safe sandbox: move → dodge → graze → shard → shield.
+  // No lives lost (damage is absorbed), nothing persists (ghost run).
+  var TUT = { idx: 0, active: false, moveX0: 0, trackMove: 0, t0: 0, shardSpawned: 0, shieldSpawned: false };
+  var TUT_STEPS = [
+    { id: "move",   title: "MOVE",   text: "Move your ship: A/D, arrow keys, or drag. Travel across the arena to pass." },
+    { id: "dodge",  title: "DODGE",  text: "Hazards are falling! Slip between them — touching one here only rattles you." },
+    { id: "graze",  title: "GRAZE",  text: "Skim a block's edge without touching it. Grazes build combo + score!" },
+    { id: "shard",  title: "SHARD",  text: "Golden shards incoming — fly into one to collect it." },
+    { id: "shield", title: "SHIELD", text: "Green SHIELD pickup drops! Grab it — it absorbs one real hit out there." }
+  ];
+  function startTutorial() { startMode("tutorial"); }
+  function startTutorialSteps() {
+    TUT.idx = 0; TUT.active = true;
+    TUT.moveX0 = player ? player.x : 453;
+    TUT.trackMove = 0; TUT.t0 = G.elapsed;
+    TUT.shardSpawned = 0; TUT.shieldSpawned = false;
+    showCoach();
+    coachSay(0);
+    showBanner("FLIGHT SCHOOL — LESSON 1/5", 1.8);
+  }
+  function coachSay(i) {
+    var bar = $("#coachbar");
+    if (!bar) return;
+    bar.hidden = false;
+    var s = TUT_STEPS[i];
+    $("#coachStep").textContent = "STEP " + (i + 1) + "/" + TUT_STEPS.length + " · " + s.title;
+    $("#coachText").textContent = s.text;
+    $("#coachFill").style.width = Math.round((i / TUT_STEPS.length) * 100) + "%";
+  }
+  function showCoach() { var b = $("#coachbar"); if (b) b.hidden = false; }
+  function hideCoach() { var b = $("#coachbar"); if (b) b.hidden = true; }
+  function tutStep() { return TUT_STEPS[TUT.idx] ? TUT_STEPS[TUT.idx].id : "done"; }
+  function tutAdvance() {
+    if (!TUT.active) return;
+    Sfx.blip();
+    if (player) burst(player.x + player.w / 2, player.y, "#5dff9a", 14);
+    TUT.idx++;
+    if (TUT.idx >= TUT_STEPS.length) { tutGraduate(); return; }
+    TUT.t0 = G.elapsed;
+    if (tutStep() === "shard") { TUT.shardSpawned = 0; }
+    if (tutStep() === "shield") { TUT.shieldSpawned = false; }
+    coachSay(TUT.idx);
+    showBanner("LESSON " + (TUT.idx + 1) + "/" + TUT_STEPS.length + " — " + TUT_STEPS[TUT.idx].title, 1.6);
+    $("#coachFill").style.width = Math.round((TUT.idx / TUT_STEPS.length) * 100) + "%";
+  }
+  function tutGraduate() {
+    TUT.active = false;
+    hideCoach();
+    Store.set(K.tutorial, { done: true, at: Date.now() });
+    showBanner("GRADUATED! ✈", 2.0);
+    Sfx.win();
+    $("#coachFill").style.width = "100%";
+    showOverlay(
+      '<h2 class="win">FLIGHT SCHOOL CLEARED</h2>' +
+      '<div class="stats"><span>GRAZES ' + G.graze + "</span><span>SHARDS " + G.shards + "</span></div>" +
+      '<p class="story">You can move, dodge, graze, collect, and shield. The real sectors await, pilot.</p>' +
+      '<div class="btn-row">' +
+      '<button class="ghost-btn primary" data-act="tut-classic">FLY SECTOR 01</button>' +
+      '<button class="ghost-btn" data-act="retry">REPLAY</button>' +
+      '<button class="ghost-btn" data-act="home">HOME</button></div>'
+    );
+    hudStatus.textContent = "GRADUATE";
+  }
+  function tutSkip() {
+    if (G.mode !== "tutorial") return;
+    TUT.active = false;
+    hideCoach();
+    goHome();
+  }
+  // scripted spawns per step (called from updatePlay while in tutorial mode)
+  function tutScript(dt) {
+    if (!TUT.active || G.state !== "playing") return;
+    var step = tutStep();
+    if (step === "shard") {
+      TUT.shardSpawned += dt;
+      if (TUT.shardSpawned >= 0.6 && shardItems.length === 0 && G.shards < 1) {
+        TUT.shardSpawned = -2.5;   // cadence: a shard every ~3s until collected
+        shardItems.push({ x: clamp(player.x + rand(-160, 160), 30, 912), y: -16, w: 18, h: 18, vy: 130 });
+      }
+    }
+    if (step === "shield") {
+      if (!TUT.shieldSpawned && pickups.length === 0 && G.shield < 1) {
+        TUT.shieldSpawned = true;
+        pickups.push({ x: clamp(player.x, 60, 880), y: -20, w: 24, h: 24, vy: 110, kind: "shield", color: POWERUPS.shield.color });
+      }
+    }
+    // step completion checks
+    if (step === "move" && TUT.trackMove > 260) tutAdvance();
+    else if (step === "dodge" && G.elapsed - TUT.t0 > 10) tutAdvance();
+    else if (step === "graze" && G.graze >= 1) tutAdvance();
+    else if (step === "shard" && G.shards >= 1) tutAdvance();
+    else if (step === "shield" && G.shield >= 1) tutAdvance();
   }
 
   // ================= overlays / flow =================
@@ -1166,6 +1282,15 @@
     if (cd && cd.invuln) return;                    // top-tier auras never die
     if (G.state !== "playing") return;
     if (player.invuln > 0 || G.phaseUpT > 0) return;
+    if (G.mode === "tutorial") {
+      // flight school: hits rattle but never cost lives
+      player.invuln = 1.1;
+      G.shake = Math.max(G.shake, 8);
+      burst(player.x + player.w / 2, player.y + player.h / 2, "#5dff9a", 10);
+      addPopup(player.x + player.w / 2, player.y - 6, "OOPS — KEEP DODGING!", "#5dff9a");
+      Sfx.blip();
+      return;
+    }
     if (G.shield > 0) {
       G.shield--;
       player.invuln = 1.1;
@@ -1383,6 +1508,11 @@
     }
     var maxX = player.laneMax || 960;
     player.x = clamp(x, 8, Math.min(960, maxX) - player.w - 8);
+    // tutorial step 1 tracks total travel distance (keyboard + drag + touch)
+    if (TUT.active && tutStep() === "move" && G.state === "playing") {
+      TUT.trackMove += Math.abs(player.x - (TUT.lastX != null ? TUT.lastX : player.x));
+      TUT.lastX = player.x;
+    }
     player.trail.push({ x: player.x + player.w / 2, y: player.y + player.h, t: 0.35 });
     if (player.trail.length > 26) player.trail.shift();
     player.invuln = Math.max(0, player.invuln - dt);
@@ -1444,6 +1574,12 @@
 
   function currentPattern() {
     if (G.mode === "classic" || G.mode === "null") return G.sector.pattern;
+    if (G.mode === "tutorial") {
+      var ts = tutStep();
+      if (ts === "move") return "basic";
+      if (ts === "dodge" || ts === "graze") return "rain";
+      return "basic";   // shard/shield steps stay gentle
+    }
     if (G.mode === "endless") return PHASES[Math.min(G.phaseIdx, PHASES.length - 1)].pattern;
     if (G.mode === "multiplayer") {
       if (G.elapsed < 25) return "basic";
@@ -1543,12 +1679,17 @@
     var gap = 0.8;
     if (G.mode === "endless") gap = Math.max(0.26, 0.8 - G.elapsed * 0.006);
     else if (G.mode === "multiplayer") gap = Math.max(0.3, 0.75 - G.elapsed * 0.004);
+    else if (G.mode === "tutorial") gap = G.spawnGap;
     else if (G.mode === "null") gap = 0.6;
     else if (G.sector) gap = G.sector.pattern === "boss" ? 9 : G.spawnGap;
     if (G.spawnT >= gap) {
       G.spawnT = 0;
       var pat = currentPattern();
       if (pat !== "boss") spawnPattern(pat);
+    }
+    if (G.mode === "tutorial") {
+      tutScript(dt);   // scripted shards/shield + step checks
+      if (!TUT.active && G.state === "playing") return; // graduated overlay up — freeze the arena
     }
 
     if (G.sector && G.sector.objective.type === "shards") {
@@ -1790,6 +1931,9 @@
       mid = "PHASE " + (G.phaseIdx + 1) + " · TIER " + tierMax() + (G.shield ? " · SHIELD" : "");
     } else if (G.mode === "multiplayer") {
       mid = "RACE · " + G.elapsed.toFixed(1) + "s" + (G.elapsed > 90 ? " · SUDDEN DEATH" : "");
+    } else if (G.mode === "tutorial") {
+      mid = "FLIGHT SCHOOL · STEP " + Math.min(TUT.idx + 1, TUT_STEPS.length) + "/" + TUT_STEPS.length +
+        (G.shield ? " · SHIELD" : "");
     } else mid = "—";
     var hudCheat = cheatDef();
     if (hudCheat && mid !== "—") mid = "⚡" + hudCheat.tag + " · " + mid;
@@ -2214,6 +2358,7 @@
     if (k === "m" || k === "M") { Sfx.toggle(); return; }
     if (k === "f" || k === "F") { toggleFullscreen(); return; }
     if (activeScreen() === "home") {
+      if (k === "0") location.hash = "#/tutorial";
       if (k === "1") location.hash = "#/classic";
       if (k === "2") location.hash = "#/endless";
       if (k === "3") location.hash = "#/multiplayer";
@@ -2279,6 +2424,8 @@
   function goHome() {
     stopLoop();
     Sfx.droneStop();
+    TUT.active = false;
+    hideCoach();
     G.state = "idle";
     hideOverlay();
     bannerEl.hidden = true;
@@ -2384,4 +2531,16 @@
   refreshHome();
   route();
   window.addEventListener("load", fitCanvas);
+  // ================= tutorial coach / buttons =================
+  var bs = $("#btnCoachSkip");
+  if (bs) bs.addEventListener("click", tutSkip);
+  bs.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") tutSkip(); });
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest ? e.target.closest("[data-act]") : null;
+    if (!btn) return;
+    var act = btn.getAttribute("data-act");
+    if (act === "tut-classic") { tutSkip(); startMode("classic"); }
+    else if (act === "tut-retry") { tutSkip(); startTutorial(); }
+    else if (act === "tut-home") { tutSkip(); goHome(); }
+  });
 })();

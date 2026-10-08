@@ -41,6 +41,14 @@
         <span class="launch">LAUNCH <kbd>1</kbd></span>
       </article>
 
+      <article class="mode-card tutorial-card" tabindex="0" data-goto="tutorial">
+        <div class="card-icon">&#9992;</div>
+        <h2>FLIGHT SCHOOL</h2>
+        <p>New pilot? Learn to move, dodge, graze, and grab power-ups — 60 seconds, no lives lost.</p>
+        <div class="card-meta"><span id="metaTutorial">NOT GRADUATED</span></div>
+        <span class="launch">TRAIN <kbd>0</kbd></span>
+      </article>
+
       <article class="mode-card" tabindex="0" data-goto="endless">
         <div class="card-icon">&infin;</div>
         <h2>ENDLESS</h2>
@@ -158,6 +166,13 @@
       <canvas id="gameCanvas" width="960" height="540"></canvas>
 
       <div class="hud-bottom" id="hudHint">A/D or arrows move · drag on mobile · P pause · F fullscreen · M sound</div>
+
+      <div class="coachbar" id="coachbar" hidden>
+        <div class="coach-step" id="coachStep">STEP 1/5</div>
+        <div class="coach-text" id="coachText">Move!</div>
+        <div class="coach-progress"><div class="coach-fill" id="coachFill"></div></div>
+        <button class="ghost-btn coach-skip" id="btnCoachSkip">SKIP</button>
+      </div>
 
       <div class="banner" id="banner" hidden></div>
 

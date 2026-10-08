@@ -324,6 +324,57 @@ h1.glitch::after { color: var(--cyan); animation: glitch-b 2.7s infinite steps(1
   50% { transform: scale(1.5); opacity: 0.55; }
 }
 
+/* ---------- coachbar (tutorial) ---------- */
+.coachbar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 44px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(94%, 720px);
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(93, 255, 154, 0.45);
+  background: rgba(2, 16, 10, 0.88);
+  box-shadow: 0 0 30px rgba(93, 255, 154, 0.22);
+  backdrop-filter: blur(6px);
+}
+.coachbar[hidden] { display: none !important; }
+.coach-step {
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  letter-spacing: 0.2em;
+  color: #5dff9a;
+  white-space: nowrap;
+}
+.coach-text {
+  flex: 1;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  text-align: left;
+}
+.coach-progress {
+  flex: 0 0 120px;
+  height: 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.coach-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #5dff9a, #00f0ff);
+  transition: width 0.25s ease;
+}
+.coach-skip { padding: 6px 12px; font-size: 0.72rem; }
+.tutorial-card { border-color: rgba(93, 255, 154, 0.4); }
+.tutorial-card .card-icon { color: #5dff9a; }
+
 /* ---------- aura pad (mobile cheat entry) ---------- */
 .aura-panel { width: min(94vw, 560px); }
 .aura-grid {
