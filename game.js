@@ -193,7 +193,7 @@
     var h = (location.hash || "").replace(/^#\/?/, "");
     if (h === "classic") { showScreen("game"); startMode("classic"); }
     else if (h === "endless") { showScreen("game"); startMode("endless"); }
-    else if (h === "multiplayer") { showScreen("lobby"); }
+    else if (h === "multiplayer") { stopLoop(); G.state = "idle"; hideOverlay(); bannerEl.hidden = true; showScreen("lobby"); }
     else if (h === "null") {
       if (prog.nullUnlocked) { showScreen("game"); startMode("null"); }
       else location.hash = "";
@@ -273,9 +273,9 @@
   var G = {
     mode: null, state: "idle", sector: null, difficulty: "rookie",
     score: 0, lives: 3, elapsed: 0, timeLeft: 0,
-    spawnT: 0, spawnGap: 0.8, phaseIdx: 0, phaseT: 0, pkTmr: 4, shardTmr: 0,
+    spawnT: 0, spawnGap: 0.8, phaseIdx: 0, phaseClock: 0, pkTmr: 4, shardTmr: 0,
     bannerT: 0,
-    slowT: 0, freezeT: 0, magnetT: 0, phaseT: 0, x2T: 0, overT: 0,
+    slowT: 0, freezeT: 0, magnetT: 0, phaseUpT: 0, x2T: 0, overT: 0,
     shield: 0, hasRevive: false,
     shake: 0, flash: 0,
     graze: 0, shards: 0, combo: 0, comboT: 0,
@@ -331,7 +331,7 @@
     G.graze = 0;
     G.shards = 0;
     G.combo = 0;
-    G.slowT = G.freezeT = G.magnetT = G.phaseT = G.x2T = G.overT = 0;
+    G.slowT = G.freezeT = G.magnetT = G.phaseUpT = G.x2T = G.overT = 0;
     G.shield = 0;
     G.hasRevive = false;
     G.shake = G.flash = 0;
@@ -368,7 +368,7 @@
       G.timeLeft = 0;
       G.spawnGap = 0.8;
       G.phaseIdx = 0;
-      G.phaseT = 0;
+      G.phaseClock = 0;
       player = makeShip(453, "#00f0ff");
       beginPlay();
       return;
@@ -643,7 +643,7 @@
     if (kind === "shield") G.shield = Math.max(G.shield, 1);
     else if (kind === "slow") G.slowT = spec.dur;
     else if (kind === "magnet") G.magnetT = spec.dur;
-    else if (kind === "phase") { G.phaseT = spec.dur; Sfx.phaseSfx(); }
+    else if (kind === "phase") { G.phaseUpT = spec.dur; Sfx.phaseSfx(); }
     else if (kind === "blast") {
       for (var i = 0; i < obstacles.length; i++) {
         burst(obstacles[i].x + obstacles[i].w / 2, obstacles[i].y + obstacles[i].h / 2, "#ff9a5d", 6);
@@ -662,7 +662,7 @@
   function damagePlayer() {
     if (secretFlag) return;                    // owner inert
     if (G.state !== "playing") return;
-    if (player.invuln > 0 || G.phaseT > 0) return;
+    if (player.invuln > 0 || G.phaseUpT > 0) return;
     if (G.shield > 0) {
       G.shield--;
       player.invuln = 1.1;
@@ -910,7 +910,7 @@
   function updatePlay(dt) {
     G.elapsed += dt;
 
-    var tkeys = ["slowT", "freezeT", "magnetT", "phaseT", "x2T", "overT"];
+    var tkeys = ["slowT", "freezeT", "magnetT", "phaseUpT", "x2T", "overT"];
     for (var ti = 0; ti < tkeys.length; ti++) {
       if (G[tkeys[ti]] > 0) G[tkeys[ti]] = Math.max(0, G[tkeys[ti]] - dt);
     }
@@ -938,9 +938,9 @@
     if (G.mode === "multiplayer") updateBot(dt);
 
     if (G.mode === "endless") {
-      G.phaseT += dt;
-      if (G.phaseT >= 30) {
-        G.phaseT = 0;
+      G.phaseClock += dt;
+      if (G.phaseClock >= 30) {
+        G.phaseClock = 0;
         if (G.phaseIdx < PHASES.length - 1) {
           G.phaseIdx++;
           showBanner(PHASES[G.phaseIdx].name, 1.6);
@@ -995,12 +995,12 @@
       if (ob.y > 560 + ob.h) { obstacles.splice(i, 1); continue; }
       if (ob.type === "warn") continue;
 
-      if (G.phaseT <= 0 && player.invuln <= 0 && aabb({ x: player.x, y: player.y, w: player.w, h: player.h }, ob)) {
+      if (G.phaseUpT <= 0 && player.invuln <= 0 && aabb({ x: player.x, y: player.y, w: player.w, h: player.h }, ob)) {
         damagePlayer();
         if (G.state === "over") return;
       }
       // graze detection
-      if (!ob.grazed && player && G.phaseT <= 0) {
+      if (!ob.grazed && player && G.phaseUpT <= 0) {
         var overlapX = player.x + player.w > ob.x && player.x < ob.x + ob.w;
         var nearY = ob.y + ob.h > player.y - 26 && ob.y < player.y + player.h + 26;
         var noHit = !(overlapX && ob.y < player.y + player.h && ob.y + ob.h > player.y);
@@ -1016,7 +1016,7 @@
         }
       }
       // bot collision
-      if (G.bot && G.bot.alive && G.bot.ship.invuln <= 0 && G.phaseT <= 0) {
+      if (G.bot && G.bot.alive && G.bot.ship.invuln <= 0 && G.phaseUpT <= 0) {
         var bs = G.bot.ship;
         if (aabb({ x: bs.x, y: bs.y, w: bs.w, h: bs.h }, ob)) {
           G.bot.alive = false;
@@ -1069,7 +1069,7 @@
         bl.x += bl.vx * dt * speedScale;
         bl.y += bl.vy * dt * speedScale;
         if (bl.x < -20 || bl.x > 980 || bl.y < -20 || bl.y > 560) { bullets.splice(bi, 1); continue; }
-        if (player.invuln <= 0 && G.phaseT <= 0) {
+        if (player.invuln <= 0 && G.phaseUpT <= 0) {
           var dx = (player.x + player.w / 2) - bl.x;
           var dy = (player.y + player.h / 2) - bl.y;
           if (dx * dx + dy * dy < (bl.r + 14) * (bl.r + 14)) {
@@ -1189,7 +1189,7 @@
     if (s.invuln > 0 && Math.floor(performance.now() / 90) % 2 === 0) return;
 
     ctx.save();
-    if (G.phaseT > 0) ctx.globalAlpha = 0.45;
+    if (G.phaseUpT > 0) ctx.globalAlpha = 0.45;
     if (secretFlag) { ctx.shadowColor = "#7cf7ff"; ctx.shadowBlur = 24; }
     else { ctx.shadowColor = s.color; ctx.shadowBlur = 18; }
     ctx.fillStyle = s.color;
@@ -1428,8 +1428,10 @@
 
   // ================= events =================
   function activeScreen() {
-    var el = document.querySelector(".screen.active");
-    return el ? el.id.replace("screen-", "") : "home";
+    var el = null;
+    try { el = document.querySelector(".screen.active"); } catch (e) { el = null; }
+    if (!el || !el.id) return "home";
+    return String(el.id).replace("screen-", "");
   }
 
   window.addEventListener("keydown", function (e) {
