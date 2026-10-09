@@ -3116,26 +3116,44 @@ function submitRun(won) {
 }
 
 var lbMode = "endless";
+function lbOrdinal(i) {
+  if (i === 0) return "★ 1ST";
+  if (i === 1) return "☆ 2ND";
+  if (i === 2) return "3RD";
+  return (i + 1) + "TH";
+}
+function lbPlace(rows, i) {
+  // standard competition ranking: equal scores share placement (1,1,3…)
+  var p = 1;
+  for (var k = 1; k <= i; k++) { if (rows[k].score !== rows[k - 1].score) p = k + 1; }
+  return p;
+}
+function lbFmt(n) { return String(Math.floor(n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
 function renderBoard() {
   var rows = LB.top(lbMode, 10);
   renderBoard.rows = rows;
   var box = $("#lbRows");
   if (!box) return;
+  var me = String((Auth.ok() && Auth.callsign()) || (pilot && pilot.name) || "").toLowerCase();
   if (!rows.length) {
     box.innerHTML = "<p class='lb-empty'>NO RUNS LOGGED — FLY ONE.</p>";
   } else {
-    box.innerHTML = rows.map(function (r, i) {
-      var medal = i === 0 ? "★" : (i === 1 ? "☆" : (i + 1));
+    var html = "<div class='lb-head'><span>RANK</span><span>PILOT</span><span>SCORE</span></div>";
+    html += rows.map(function (r, i) {
+      var place = lbPlace(rows, i);
+      var medal = lbOrdinal(place - 1);
+      var mine = me && String(r.name || "").toLowerCase() === me;
       var detail = (r.date ? r.date + " · " : "") + (r.rank ? r.rank + " · " : (r.time ? r.time + "s · " : ""));
-      return "<div class='lb-row'>" +
-        "<span class='lb-pos'>" + medal + "</span>" +
-        "<span class='lb-name'>" + String(r.name).slice(0, 14) + "</span>" +
+      return "<div class='lb-row" + (mine ? " mine" : "") + "'>" +
+        "<span class='lb-pos" + (place <= 3 ? " top" + place : "") + "'>" + medal + "</span>" +
+        "<span class='lb-name'>" + String(r.name).slice(0, 14) + (mine ? " <em>YOU</em>" : "") + "</span>" +
         "<span class='lb-title'>" + String(r.title || "").slice(0, 12) + "</span>" +
-        "<span class='lb-score'>" + r.score + "</span>" +
+        "<span class='lb-score'>" + lbFmt(r.score) + "</span>" +
         "<span class='lb-detail'>" + detail + (r.won ? "CLEARED" : "") + "</span>" +
         (Auth.superior() ? "<button class='lb-del' data-i='" + i + "' title='delete'>&#10005;</button>" : "") +
         "</div>";
     }).join("");
+    box.innerHTML = html;
   }
   var tabs = $("#lbTabs");
   if (tabs) Array.prototype.forEach.call(tabs.children, function (b) {

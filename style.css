@@ -798,6 +798,21 @@ h1.small { margin: 8px 0 4px; font-family: var(--font-display); font-size: clamp
 .lb-score { grid-area: score; color: var(--amber, #ffd166); font-weight: 700; font-variant-numeric: tabular-nums; }
 .lb-detail { grid-area: detail; font-size: 0.66rem; color: var(--dim); justify-self: end; }
 .lb-empty { text-align: center; color: var(--dim); font-size: 0.8rem; padding: 18px 0; letter-spacing: 0.1em; }
+/* board header + true ranking treatment */
+.lb-head {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 2px 10px 8px;
+  font-family: var(--font-display); font-size: 0.62rem; font-weight: 700;
+  letter-spacing: 0.24em; color: var(--dim); text-transform: uppercase;
+}
+.lb-head span:nth-child(2) { flex: 1 1 auto; }
+.lb-pos { white-space: nowrap; }
+.lb-pos.top1 { color: #ffd75d; text-shadow: 0 0 12px rgba(255, 215, 93, 0.6); }
+.lb-pos.top2 { color: #eaf6ff; text-shadow: 0 0 10px rgba(234, 246, 255, 0.5); }
+.lb-pos.top3 { color: #ffb454; text-shadow: 0 0 10px rgba(255, 180, 84, 0.5); }
+.lb-row.mine { border-color: rgba(0, 240, 255, 0.55); box-shadow: 0 0 14px rgba(0, 240, 255, 0.25); }
+.lb-name em { font-style: normal; font-size: 0.6rem; letter-spacing: 0.14em; color: var(--cyan); border: 1px solid rgba(0, 240, 255, 0.5); border-radius: 999px; padding: 0 6px; margin-left: 6px; }
+.lb-score { font-variant-numeric: tabular-nums; }
 .lb-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
 .lb-foot #lbSource { font-size: 0.66rem; color: var(--dim); letter-spacing: 0.1em; }
 /* superior console row: 5 controls — must wrap instead of clipping HIDDEN WORDS */
