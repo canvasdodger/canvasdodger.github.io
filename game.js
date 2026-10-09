@@ -930,7 +930,8 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     cheatLifeGiven = false;
     if (activeCheat) Sfx.droneStart(activeCheat); else Sfx.droneStop();
     G.won = false;
-    G.seed = G.daily ? dailySeed(G.daily) : (Math.random() * 0xffffffff) >>> 0;
+    G.seed = G.daily ? dailySeed(G.daily)
+      : (opts.seed != null ? (opts.seed >>> 0) : (Math.random() * 0xffffffff) >>> 0);
     G.rng = makeRng(G.seed);
     G.pkTmr = 4;
     G.shardTmr = 0;
@@ -992,20 +993,28 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       G.timeLeft = 0;
       G.spawnGap = 0.75;
       G.phaseIdx = 0;
-      var spec = BOT_SPECS[G.difficulty] || BOT_SPECS.easy;
       player = makePlayer(200, cheatShipColor(paintById(HANGAR.paint).hex));
       player.laneMax = 440;
-      G.bot = {
-        ship: makeShip(700, "#ff2bd6"),
-        spec: spec,
-        botId: G.difficulty,
-        alive: true,
-        thinkT: 0,
-        targetX: 700,
-        mistakeT: (spec.mistakeEvery || 6) * 0.7,
-        laneMin: 520,
-        laneMax: 930
-      };
+      if (opts.net) {
+        // ONLINE ghost rival: no AI. Position + alive + seen stream over REST;
+        // collisions stay local, storms are shared via the room seed.
+        G.bot = {
+          ship: makeShip(700, "#7cf6ff"),
+          net: true, rival: opts.rival || "RIVAL",
+          alive: true, remoteX: 700, remoteElapsed: 0,
+          lastSeen: Date.now(), rivalLeft: false,
+          laneMin: 520, laneMax: 930
+        };
+      } else {
+        var spec = BOT_SPECS[G.difficulty] || BOT_SPECS.easy;
+        G.bot = {
+          ship: makeShip(700, "#ff2bd6"),
+          spec: spec, botId: G.difficulty,
+          alive: true, thinkT: 0, targetX: 700,
+          mistakeT: (spec.mistakeEvery || 6) * 0.7,
+          laneMin: 520, laneMax: 930
+        };
+      }
       showScreen("game");
       beginPlay();
     }
@@ -1614,6 +1623,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
 
   function loseRun() {
     G.state = "over";
+    if (G.mode === "multiplayer" && G.bot && G.bot.net) NetRival.push(player.x, false, G.elapsed, true);
     submitRun(false);
     Sfx.droneStop();
     Sfx.lose();
@@ -1662,6 +1672,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   }
 
   function botWinFlow(playerWon) {
+    if (G.bot && G.bot.net) { netWinFlow(playerWon); return; }
     var bid = normalizeBot(G.bot ? G.bot.botId : G.difficulty);
     var key = botWinsKey(bid);
     var wins = Store.get(key, 0) | 0;
@@ -1679,6 +1690,25 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       '<button class="ghost-btn" data-act="home">HOME</button></div>'
     );
     hudStatus.textContent = playerWon ? "VICTORY" : "DEFEAT";
+  }
+
+  function netWinFlow(playerWon) {
+    NetRival.finish(playerWon);
+    var rival = (G.bot && G.bot.rival) || "RIVAL";
+    var left = !!(G.bot && G.bot.rivalLeft);
+    var head = playerWon
+      ? (left ? "RIVAL LOST — YOU TAKE THE ROUND" : "YOU OUTLASTED " + rival)
+      : (rival + " OUTLASTED YOU");
+    var myT = G.elapsed.toFixed(1);
+    var rvT = (((G.bot && G.bot.remoteElapsed) || 0)).toFixed(1);
+    showOverlay(
+      '<h2 class="' + (playerWon ? "win" : "lose") + '">' + head + "</h2>" +
+      '<div class="stats"><span>YOU ' + myT + "s</span><span>" + rival + " " + rvT + "s</span></div>" +
+      '<div class="btn-row"><button class="ghost-btn primary" data-act="lobby">LOBBY</button>' +
+      '<button class="ghost-btn" data-act="home">HOME</button></div>'
+    );
+    hudStatus.textContent = playerWon ? "VICTORY" : "DEFEAT";
+    if (G.bot) G.bot.net = false;   // latch: result shown once
   }
 
   // ================= update helpers =================
@@ -1786,6 +1816,19 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   }
 
   // ================= update =================
+  function updateNetBot(dt) {
+    var b = G.bot;
+    if (!b) return;
+    var s = b.ship;
+    var tx = (typeof b.remoteX === "number") ? b.remoteX : s.x;
+    var cap = 900;                     // fast ghost follow, capped (no snap)
+    s.x += clamp(tx - s.x, -cap * dt, cap * dt);
+    s.x = clamp(s.x, b.laneMin, b.laneMax - s.w);
+    s.trail.push({ x: s.x + s.w / 2, y: s.y + s.h, t: 0.35 });
+    if (s.trail.length > 26) s.trail.shift();
+    s.invuln = Math.max(0, s.invuln - dt);
+  }
+
   function updatePlay(dt) {
     G.elapsed += dt;
     if (G.daily && G.elapsed >= DAILY_SECS) {
@@ -1854,7 +1897,10 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     }
 
     updatePlayer(dt);
-    if (G.mode === "multiplayer") updateBot(dt);
+    if (G.mode === "multiplayer") {
+      if (G.bot && G.bot.net) updateNetBot(dt); else updateBot(dt);
+    }
+    if (G.mode === "multiplayer" && G.bot && G.bot.net) NetRival.push(player.x, true, G.elapsed);
 
     if (G.mode === "endless") {
       G.phaseClock += dt;
@@ -2014,7 +2060,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
         }
       }
       // bot collision
-      if (G.bot && G.bot.alive && G.bot.ship.invuln <= 0 && G.phaseUpT <= 0) {
+      if (G.bot && !G.bot.net && G.bot.alive && G.bot.ship.invuln <= 0 && G.phaseUpT <= 0) {
         var bs = G.bot.ship;
         if (aabb({ x: bs.x, y: bs.y, w: bs.w, h: bs.h }, ob)) {
           G.bot.alive = false;
@@ -2579,7 +2625,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     drawBoss(time);
     drawShip(player, null);
     if (G.bot && G.bot.alive) {
-      var botLabel = (G.bot.spec && G.bot.spec.label) || (G.bot.botId || G.difficulty || "").toUpperCase();
+      var botLabel = G.bot.net ? (G.bot.rival || "RIVAL") : ((G.bot.spec && G.bot.spec.label) || (G.bot.botId || G.difficulty || "").toUpperCase());
       drawShip(G.bot.ship, botLabel);
     }
     drawFx();
@@ -2740,6 +2786,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     hideOverlay();
     bannerEl.hidden = true;
     if (location.hash) location.hash = "";
+    NetRival.leave();
     showScreen("home");
   }
 
@@ -2847,14 +2894,9 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     }
   });
 
-  $("#btnRoom").addEventListener("click", function () {
-    var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    var code = "";
-    for (var i = 0; i < 6; i++) code += chars[(Math.random() * chars.length) | 0];
-    $("#roomCode").value = code;
-    Sfx.blip();
-    setTimeout(function () { $("#roomCode").value = ""; }, 2600);
-  });
+  $("#btnRoom").addEventListener("click", function () { NetRival.create(); });
+  var rj = $("#btnRoomJoin");
+  if (rj) rj.addEventListener("click", function () { NetRival.join(); });
 
   var howto = $("#howto");
   $("#btnHowto").addEventListener("click", function () { howto.hidden = false; });
@@ -3635,6 +3677,165 @@ function refreshCloudBoard() {
     renderBoard();
   }).catch(function () { LB.cloudOK = false; renderBoard(); });
 }
+
+// ================= online rooms (ghost race over polled REST) =================
+// No SDK / no Realtime toggle: each side owns a column namespace in one `rooms`
+// row and reads the opponent at ~10Hz. The storm is DETERMINISTIC — both clients
+// share `seed`, so makeRng() spawns an identical hazard schedule on both
+// machines. Only x / alive / seen / elapsed cross the wire; collisions stay
+// local, so there is no host advantage and no lag disputes.
+var NetRival = {
+  room: null,        // { code, seed, side, rival, myCs }
+  poll: null,
+  pushT: 0,
+  CODE: "ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
+
+  _code: function () {
+    var s = "";
+    for (var i = 0; i < 6; i++) s += this.CODE[(Math.random() * this.CODE.length) | 0];
+    return s;
+  },
+  _rest: function (path, opts) {
+    opts = opts || {};
+    opts.headers = Auth.hdrs(opts.headers);
+    return fetch(CLOUD.url + "/rest/v1/" + path, opts);
+  },
+  _rpc: function (name, body) {
+    return fetch(CLOUD.url + "/rest/v1/rpc/" + name, {
+      method: "POST", headers: Auth.hdrs(), body: JSON.stringify(body || {})
+    }).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok) throw new Error((j && (j.message || j.hint)) || ("http " + r.status));
+        return j;
+      });
+    });
+  },
+  status: function (t, busy) {
+    var el = $("#roomStatus");
+    if (el) el.textContent = t;
+    if (busy != null) {
+      var a = $("#btnRoom"), b = $("#btnRoomJoin");
+      if (a) a.disabled = busy; if (b) b.disabled = busy;
+    }
+  },
+
+  create: function () {
+    var self = this;
+    if (!gateMode("ONLINE DUEL", null)) return;
+    if (!CLOUD.on) { this.status("CLOUD OFFLINE — ONLINE UNAVAILABLE."); return; }
+    var code = this._code();
+    this.status("OPENING ROOM " + code + " …", true);
+    this._rpc("create_room", { p_code: code, p_seed: (Math.random() * 0xffffffff) >>> 0 })
+      .then(function (row) {
+        if (!row || !row.code) { self.status("COULD NOT OPEN ROOM — TRY AGAIN."); return; }
+        var rc = $("#roomCode"); if (rc) rc.value = code;
+        self.room = { code: code, seed: row.seed, side: "host", rival: "", myCs: Auth.callsign() || "HOST" };
+        self.status("ROOM " + code + " OPEN — WAITING FOR RIVAL …", false);
+        self.startPoll();
+      })
+      .catch(function (e) { self.status("CREATE FAILED — " + String((e && e.message) || e).toUpperCase()); });
+  },
+
+  join: function () {
+    var self = this;
+    if (!gateMode("ONLINE DUEL", null)) return;
+    if (!CLOUD.on) { this.status("CLOUD OFFLINE — ONLINE UNAVAILABLE."); return; }
+    var rc = $("#roomCode");
+    var code = String((rc && rc.value) || "").trim().toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, "");
+    if (code.length !== 6) { this.status("ENTER A 6-CHARACTER ROOM CODE."); return; }
+    this.status("JOINING " + code + " …", true);
+    this._rpc("join_room", { p_code: code })
+      .then(function (row) {
+        if (!row || !row.code) throw new Error("NOT FOUND");
+        self.room = { code: code, seed: row.seed, side: "guest", rival: row.host_cs || "RIVAL", myCs: Auth.callsign() || "GUEST" };
+        return self._rest("rooms?code=eq." + encodeURIComponent(code), {
+          method: "PATCH", body: JSON.stringify({ status: "racing" })
+        }).then(function () {
+          self.beginRace(row.seed, "guest", self.room.rival);
+        });
+      })
+      .catch(function (e) {
+        var m = String((e && e.message) || e).toUpperCase();
+        self.status((m.indexOf("FULL") >= 0 || m.indexOf("NOT FOUND") >= 0) ? "ROOM FULL OR NOT FOUND." : "JOIN FAILED — CHECK THE CODE.");
+      });
+  },
+
+  startPoll: function () {
+    var self = this;
+    this.stopPoll();
+    this.poll = setInterval(function () { self.tick(); }, 100);
+  },
+  stopPoll: function () { if (this.poll) { clearInterval(this.poll); this.poll = null; } },
+
+  tick: function () {
+    var self = this;
+    if (!this.room || !CLOUD.on) return;
+    var code = encodeURIComponent(this.room.code);
+    this._rest("rooms?code=eq." + code + "&select=*")
+      .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
+      .then(function (rows) {
+        var row = rows && rows[0];
+        if (!row) { self.status("ROOM CLOSED."); self.stopPoll(); return; }
+        var host = self.room.side === "host";
+        if (host && !G.bot) {
+          if (row.status === "waiting") { self.status("ROOM " + self.room.code + " OPEN — WAITING FOR RIVAL …"); return; }
+          self.room.rival = row.guest_cs || "RIVAL";
+          self._rest("rooms?code=eq." + code, { method: "PATCH", body: JSON.stringify({ status: "racing" }) }).catch(function () {});
+          self.beginRace(row.seed, "host", self.room.rival);
+          return;
+        }
+        if (G.bot && G.bot.net && G.state === "playing") {
+          self.applyRival(host ? row.guest_x : row.host_x,
+                          host ? row.guest_alive : row.host_alive,
+                          host ? row.guest_seen : row.host_seen,
+                          host ? row.guest_elapsed : row.host_elapsed);
+        }
+      })
+      .catch(function () { /* transient — keep last known state */ });
+  },
+
+  applyRival: function (x, alive, seen, elapsed) {
+    var b = G.bot;
+    if (!b || !b.net) return;
+    if (typeof x === "number") b.remoteX = x;
+    if (typeof elapsed === "number") b.remoteElapsed = elapsed;
+    if (seen) b.lastSeen = seen;                 // only real pushes refresh the clock
+    if (b.rivalLeft) return;
+    var stale = b.lastSeen && (Date.now() - b.lastSeen) > 3000;
+    if (alive === false || stale) { b.rivalLeft = true; b.alive = false; }
+  },
+
+  push: function (x, alive, elapsed, force) {
+    if (!this.room || !CLOUD.on) return;
+    var now = performance.now();
+    if (!force && now - this.pushT < 100) return;   // ~10Hz cap
+    this.pushT = now;
+    var host = this.room.side === "host";
+    var patch = host
+      ? { host_x: x, host_alive: alive, host_elapsed: elapsed, host_seen: Date.now() }
+      : { guest_x: x, guest_alive: alive, guest_elapsed: elapsed, guest_seen: Date.now() };
+    this._rest("rooms?code=eq." + encodeURIComponent(this.room.code), { method: "PATCH", body: JSON.stringify(patch) })
+      .catch(function () {});
+  },
+
+  beginRace: function (seed, side, rival) {
+    this.startPoll();
+    Sfx.blip();
+    startMode("multiplayer", { seed: seed >>> 0, net: true, rival: rival || "RIVAL", side: side });
+  },
+
+  finish: function (won) {
+    if (this.room && CLOUD.on) {
+      var code = encodeURIComponent(this.room.code);
+      this._rest("rooms?code=eq." + code, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "done", winner: won ? (this.room.myCs || "") : (this.room.rival || "") })
+      }).catch(function () {});
+    }
+    this.stopPoll();
+  },
+  leave: function () { this.stopPoll(); this.room = null; }
+};
 
 Passport.remote = {
   push: function (payload) {
