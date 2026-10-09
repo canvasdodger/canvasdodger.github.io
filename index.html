@@ -19,6 +19,8 @@
 
   <!-- ================= HOME / HUB ================= -->
   <div id="screen-home" class="screen active">
+    <canvas id="homeBg" aria-hidden="true"></canvas>
+    <div class="home-scrim" aria-hidden="true"></div>
     <div class="grid-bg" aria-hidden="true"></div>
     <div class="scanlines" aria-hidden="true"></div>
 
@@ -97,12 +99,13 @@
       <button class="ghost-btn" id="btnInstall" hidden>&#128187; INSTALL APP</button>
     </div>
 
-    <div class="pilot-bar" id="pilotBar">
+    <div class="pilot-bar" id="pilotBar" hidden>
       <div class="pilot-avatar" id="pilotAvatar" title="Click to change avatar">&#9632;</div>
       <div class="pilot-meta">
         <div class="pilot-name" id="pilotName">LUMEN</div>
         <div class="pilot-title" id="pilotTitle">PIONEER</div>
       </div>
+      <span class="pilot-state" id="pilotState">GUEST</span>
       <button class="ghost-btn tiny" id="btnPilotEdit">EDIT</button>
       <input type="file" id="pilotFile" accept="image/*" hidden>
     </div>
@@ -145,10 +148,10 @@
           <div class="passport-actions">
             <button class="ghost-btn" id="btnPassExport" type="button">EXPORT</button>
             <button class="ghost-btn" id="btnPassImport" type="button">IMPORT</button>
-            <button class="ghost-btn" id="btnPassSave" type="button">CLOUD SAVE</button>
-            <button class="ghost-btn" id="btnPassLoad" type="button">CLOUD LOAD</button>
+            <button class="ghost-btn" id="btnPassSave" type="button" title="Save this pilot to the cloud (signed in)">CLOUD SAVE</button>
+            <button class="ghost-btn" id="btnPassLoad" type="button" title="Load this pilot from the cloud (signed in)">CLOUD LOAD</button>
           </div>
-          <span class="hint" id="passportStatus">Codes are plain text — or use CLOUD SAVE / CLOUD LOAD.</span>
+          <span class="hint" id="passportStatus"></span>
         </div>
         <div class="bar-actions">
           <button class="ghost-btn" id="btnPilotPanelClose">CANCEL</button>

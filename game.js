@@ -506,7 +506,8 @@
     var el = $("#screen-" + name);
     if (el) el.classList.add("active");
     if (name === "game") fitCanvas();
-    if (name === "home") refreshHome();
+    if (name === "home") { refreshHome(); attractStart(); }
+    else attractStop();
     syncAuraChip();
   }
   // ================= ship customizer data =================
@@ -2864,6 +2865,96 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   syncMuteBtns();
   fitCanvas();
   refreshHome();
+  attractStart();   // ambient gameplay behind the home hub
+
+  // ================= Phase 3: home attract-mode =================
+  // Bot-only demo on #homeBg: a ghost ship dodging falling blocks. Fully
+  // self-contained (own entities, own rAF) — never touches live G state,
+  // score, input, or audio. Dimmed by .home-scrim so cards stay readable.
+  var attractRaf = null, attractLast = 0;
+  var attractShip = null, attractBlocks = [], attractSpawnT = 0, attractT = 0;
+  function attractReduced() {
+    try { return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
+    catch (e) { return false; }
+  }
+  function attractStart() {
+    if (attractRaf || attractReduced()) return;
+    var bg = $("#homeBg");
+    if (!bg || !bg.getContext) return;
+    attractShip = { x: 480, y: 440, w: 30, h: 30, shape: "arrow", color: "#00f0ff", trail: [], targetX: 480, thinkT: 0 };
+    attractBlocks = []; attractSpawnT = 0.4; attractT = 0;
+    attractLast = performance.now();
+    attractRaf = requestAnimationFrame(attractLoop);
+  }
+  function attractStop() {
+    if (attractRaf) { cancelAnimationFrame(attractRaf); attractRaf = null; }
+  }
+  function attractLoop(ts) {
+    if (!attractRaf && ts !== 0) return;
+    attractRaf = requestAnimationFrame(attractLoop);
+    // only animate while home is the visible screen and tab is focused
+    if (document.hidden || activeScreen() !== "home") return;
+    var dt = Math.min(0.05, (ts - attractLast) / 1000);
+    attractLast = ts;
+    attractT += dt;
+    var bg = $("#homeBg");
+    if (!bg) return;
+    var bctx = bg.getContext("2d");
+    var r = bg.getBoundingClientRect();
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var cw = Math.max(1, Math.round(r.width * dpr)), ch = Math.max(1, Math.round(r.height * dpr));
+    if (bg.width !== cw || bg.height !== ch) { bg.width = cw; bg.height = ch; }
+    // ghost pilot: drift toward a target, re-pick when near or threatened
+    var sh = attractShip;
+    sh.thinkT -= dt;
+    if (sh.thinkT <= 0) { sh.targetX = 90 + Math.random() * 780; sh.thinkT = 0.7 + Math.random() * 0.9; }
+    // dodge: steer away from the nearest block falling onto us
+    for (var i = 0; i < attractBlocks.length; i++) {
+      var b = attractBlocks[i];
+      if (b.y < sh.y && b.y > sh.y - 260 && Math.abs((b.x + b.w / 2) - (sh.x + sh.w / 2)) < 90) {
+        sh.targetX = (sh.x + sh.w / 2) < (b.x + b.w / 2) ? sh.x - 190 : sh.x + 190;
+        sh.thinkT = 0.4;
+        break;
+      }
+    }
+    sh.targetX = clamp(sh.targetX, 30, 930 - sh.w);
+    var dx = sh.targetX - sh.x;
+    sh.x += clamp(dx, -300 * dt, 300 * dt);
+    sh.trail.push({ x: sh.x + sh.w / 2, y: sh.y + sh.h, t: 0.4 });
+    while (sh.trail.length > 14) sh.trail.shift();
+    // spawn + fall blocks (low density: ambience, not gameplay)
+    attractSpawnT -= dt;
+    if (attractSpawnT <= 0) {
+      attractSpawnT = 0.9 + Math.random() * 0.8;
+      var bw = 26 + Math.random() * 40;
+      attractBlocks.push({ x: Math.random() * (960 - bw), y: -50, w: bw, h: 22 + Math.random() * 22, vy: 130 + Math.random() * 120 });
+    }
+    for (var j = attractBlocks.length - 1; j >= 0; j--) {
+      attractBlocks[j].y += attractBlocks[j].vy * dt;
+      if (attractBlocks[j].y > 600) attractBlocks.splice(j, 1);
+    }
+    // draw into the home canvas using the shared world transform + palette
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+    bctx.fillStyle = "#010615";
+    bctx.fillRect(0, 0, cw, ch);
+    var s = Math.min(cw / 960, ch / 540);
+    bctx.setTransform(s, 0, 0, s, (cw - 960 * s) / 2, (ch - 540 * s) / 2);
+    var keepCtx = ctx, keepObs = obstacles, keepPlayer = player;
+    try {
+      ctx = bctx;
+      obstacles = attractBlocks;
+      player = sh;
+      drawBackground(attractT, paletteNow());
+      drawObstacles(attractT);
+      // ghost ship: reuse drawShip then fade it like a hologram
+      bctx.save();
+      bctx.globalAlpha = 0.85;
+      drawShip(sh, null);
+      bctx.restore();
+    } finally {
+      ctx = keepCtx; obstacles = keepObs; player = keepPlayer;
+    }
+  }
 // ================= pilot profile (Phase 4) =================
 var K2 = K; K2.pilot = "dodger_pilot_v1";
 var pilot = Store.get(K2.pilot, { name: "LUMEN", title: "PIONEER", avatar: "" });
@@ -3477,6 +3568,15 @@ function syncAuthUI() {
     var sb = $("#superBox"); if (sb) sb.hidden = !Auth.superior();
     var d1 = $("#btnDevPickup"); if (d1) d1.hidden = !Auth.superior();
     var d2 = $("#btnDevScore"); if (d2) d2.hidden = !Auth.superior();
+    // Phase 4 (E2): bottom bar is a signed-in status chip — hidden for guests
+    var pb = $("#pilotBar");
+    if (pb) pb.hidden = !Auth.ok();
+    var ps = $("#pilotState");
+    if (ps) {
+      var sup = Auth.superior();
+      ps.textContent = sup ? "◈ SUPERIOR" : "SIGNED IN";
+      ps.className = "pilot-state" + (sup ? " super" : " signed");
+    }
     var mb = $("#modalBoard");
     if (mb && !mb.hidden) renderBoard();
   } catch (e) {}

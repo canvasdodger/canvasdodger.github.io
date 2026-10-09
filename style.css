@@ -43,6 +43,22 @@ button, input { font-family: inherit; }
 .screen.active { display: flex; }
 #screen-game { padding: 0; overflow: hidden; }
 
+/* ---------- Phase 3: ambient attract-mode behind home ---------- */
+#homeBg {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; opacity: 0.55;
+}
+.home-scrim {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(2, 6, 18, 0.55), transparent 60%),
+    linear-gradient(180deg, rgba(2, 6, 18, 0.62) 0%, rgba(2, 6, 18, 0.30) 45%, rgba(2, 6, 18, 0.66) 100%);
+}
+#screen-home .hero, #screen-home .mode-grid, #screen-home .home-foot, #screen-home .pilot-bar { position: relative; z-index: 2; }
+@media (prefers-reduced-motion: reduce) {
+  #homeBg { display: none; }
+}
+
 .grid-bg {
   position: absolute;
   inset: 0;
@@ -270,6 +286,43 @@ h1.glitch::after { color: var(--cyan); animation: glitch-b 2.7s infinite steps(1
 }
 .auth-cancel:hover { color: var(--cyan); text-decoration: underline; }
 .auth-btn.small { width: auto; padding: 8px 16px; font-size: 0.72rem; border-radius: 10px; }
+
+/* ---------- Phase 1: ship-hull LOGIN button ----------
+   clip-path hull (box-shadow can't survive clip-path, so engine glow = filter) */
+#btnAuthLogin.auth-btn.primary {
+  border: 0;
+  border-radius: 0;
+  padding: 16px 34px 16px 22px;
+  min-height: 52px;
+  background: linear-gradient(180deg, #7df7ff 0%, var(--cyan) 55%, #0093ad 100%);
+  color: #04202a;
+  clip-path: polygon(0% 50%, 7% 12%, 30% 12%, 30% 0%, 46% 0%, 46% 12%, 82% 12%, 100% 50%, 82% 88%, 46% 88%, 46% 100%, 30% 100%, 30% 88%, 7% 88%);
+  filter: drop-shadow(0 0 14px rgba(0, 240, 255, 0.55));
+  transition: filter 0.18s ease, transform 0.18s ease, background 0.18s ease;
+}
+#btnAuthLogin.auth-btn.primary:hover {
+  background: linear-gradient(180deg, #c8fcff 0%, #7df7ff 55%, var(--cyan) 100%);
+  filter: drop-shadow(0 0 26px rgba(0, 240, 255, 0.85));
+  transform: translateX(3px);
+  box-shadow: none;
+}
+#btnAuthLogin.auth-btn.primary:active { transform: translateX(0); }
+#btnAuthLogin.auth-btn.primary:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+}
+/* mini ship-chip entry in the pilot panel */
+#btnAuthOpen.auth-btn.primary.small {
+  border: 0;
+  border-radius: 0;
+  clip-path: polygon(0% 50%, 10% 8%, 84% 8%, 100% 50%, 84% 92%, 10% 92%);
+  filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.45));
+  padding: 8px 26px 8px 18px;
+}
+#btnAuthOpen.auth-btn.primary.small:hover { filter: drop-shadow(0 0 16px rgba(0, 240, 255, 0.75)); box-shadow: none; }
+@media (prefers-reduced-motion: reduce) {
+  #btnAuthLogin.auth-btn.primary:hover { transform: none; }
+}
 
 .home-foot { position: relative; margin-top: 26px; text-align: center; color: var(--dim); }
 .home-foot p { font-size: 0.85rem; letter-spacing: 0.08em; }
@@ -698,6 +751,16 @@ h1.small { margin: 8px 0 4px; font-family: var(--font-display); font-size: clamp
 .pilot-meta { flex: 1 1 auto; min-width: 0; }
 .pilot-name { font-weight: 700; letter-spacing: 0.1em; color: var(--cyan); }
 .pilot-title { font-size: 0.75rem; letter-spacing: 0.18em; color: var(--dim); text-transform: uppercase; }
+/* ---------- Phase 4: status-chip bar (E2) ---------- */
+.pilot-bar[hidden] { display: none; }
+.pilot-state {
+  font-family: var(--font-display); font-size: 0.66rem; font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap;
+  color: var(--dim); border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 999px; padding: 4px 10px;
+}
+.pilot-state.signed { color: #7df7ff; border-color: rgba(0, 240, 255, 0.5); box-shadow: 0 0 10px rgba(0, 240, 255, 0.25); }
+.pilot-state.super { color: #ffd75d; border-color: rgba(255, 215, 93, 0.6); box-shadow: 0 0 10px rgba(255, 215, 93, 0.3); }
 .ghost-btn.tiny { padding: 4px 10px; font-size: 0.72rem; }
 .pilot-panel { position: fixed; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center; background: rgba(4, 6, 18, 0.82); }
 .pilot-panel[hidden] { display: none; }
@@ -750,7 +813,8 @@ h1.small { margin: 8px 0 4px; font-family: var(--font-display); font-size: clamp
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.7rem;
   word-break: break-all; line-height: 1.4;
 }
-.passport-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.passport-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 8px; }
+.passport-actions .ghost-btn { padding: 8px 12px; font-size: 0.68rem; letter-spacing: 0.12em; }
 #passportStatus { display: block; margin-top: 6px; text-align: right; min-height: 1em; }
 
 /* ================= accounts + superior console ================= */
