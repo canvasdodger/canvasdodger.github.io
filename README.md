@@ -7,7 +7,8 @@ Futuristic static canvas dodger. No build, no assets — just `index.html` + `st
 ## Modes
 - **CLASSIC** — S01–S05 + S07 SOLAR WINDS + S08 MIRROR SPLIT + S09 EVENT HORIZON, then secret S06 NULL PROTOCOL (unlock with all 8 S-ranks — earlier unlocks are kept)
 - **ENDLESS** — 1 life, escalating phases every 30s, drops get stronger over time
-- **MULTIPLAYER** — race bots (Easy / Normal / Hard / Elite / Hell-final-boss) on mirrored lanes; online room-codes are a lobby mock until the backend phase
+- **MULTIPLAYER** — race bots (Easy / Normal / Hard / Elite / Hell-final-boss) on mirrored lanes
+- **VS PLAYERS — ONLINE** — room-code races against real players; dedicated screen (home card or `O`), CREATE/JOIN, shared-seed ghost duels
 
 ## Controls
 - Move: **arrow keys** or drag · Start: Space · Pause: P/Esc · Fullscreen: F · Mute: M
@@ -39,9 +40,15 @@ python3 -m http.server 8000
 - Pilot passport: `CLOUD SAVE` / `CLOUD LOAD` in the pilot panel (keyed by callsign)
 
 ## Accounts (Supabase Auth)
-- Sign-in required for **DAILY RUN, FLIGHT SCHOOL, MULTIPLAYER, HANGAR** and all cloud board writes
+- Sign-in required for **DAILY RUN, FLIGHT SCHOOL, MULTIPLAYER, HANGAR, ONLINE** and all cloud board writes
 - Identity = callsign (3–14 chars — one account per callsign) + a unique password; auth email is synthetic per callsign
-- Roles in `profiles`: `player` (default) / `superior` — superior console: WIPE TAB, per-row ✕, promote/demote, hidden-word list, dev drops
+- Roles in `profiles`: `player` (default) / `superior` — superior console: WIPE TAB, per-row ✕, promote/demote, hidden-word list, dev drops, CLOSE ROOM
+
+## Online rooms (Supabase)
+- Migration: `supabase_migration_v3_rooms.sql` → run after v2 (creates `rooms`, `create_room`/`join_room`/`rematch_room` RPCs, room_guard trigger, member-only RLS)
+- No SDK / no Realtime toggle: each side owns a `host_*`/`guest_*` column set (x/alive/seen/elapsed) and reads the opponent at ~10Hz via polled REST
+- Storm is **deterministic** — both clients share the room `seed`, so `makeRng()` spawns an identical hazard schedule; collisions stay local → no host advantage, no lag disputes
+- 3s heartbeat timeout → "RIVAL LOST — YOU TAKE THE ROUND"; REMATCH uses a fresh seed in the same room
 
 ## Updating content
 - Add sectors in `game.js` → `SECTORS` array (`{id, code, name, story, objective, pattern, speedMul, palette}`); hazards: basic/rain/walls/homing/crossfire/winds/splitters/portals/mix (+boss). S06 gate = all campaign S-ranks via `campaignSectors()`
