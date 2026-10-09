@@ -271,6 +271,8 @@
   };
   var CHEAT_WORDS = ["thunderfist", "kiphnic", "kwoffie", "zee", "naya", "ella"];
   var activeCheat = null;      // id string or null
+  var CHEAT_SECS = 90;         // aura fuse — burns out silently
+  var cheatT = 0;              // seconds left on the active aura
   var cheatShockT = 0;         // thunderfist shockwave timer
   var cheatShieldT = 0;        // naya regen timer
   var cheatPhaseT = 0;         // ella phase clock
@@ -365,6 +367,7 @@
 
   function noteKey(ch) {
     if (!ch || !/[a-z]/i.test(ch)) return;
+    if (!Auth.ok()) return;                   // auras are sign-in only
     if (activeScreen() === "lobby") return;   // lobby bot keys (q/w/e/r/t) win there
     Input.seq = (Input.seq + ch.toLowerCase()).slice(-14);
     for (var i = 0; i < CHEAT_WORDS.length; i++) {
@@ -393,9 +396,10 @@
     return false;
   }
 
-  function toggleCheat(id) {
+  function toggleCheat(id, silent) {
     activeCheat = (activeCheat === id) ? null : id;
     var def = cheatDef();
+    cheatT = def ? CHEAT_SECS : 0;
     cheatShockT = (def && def.shockT) || 0;
     cheatShieldT = 0;
     cheatPhaseT = 0;
@@ -413,22 +417,28 @@
         player.color = paintById(player.paint || HANGAR.paint).hex;
       }
     }
-    flashCheatDot();
-    cheatFanfare(def);
-    syncAuraChip();
     if (def) Sfx.droneStart(activeCheat);
     else Sfx.droneStop();
+    syncAuraChip();
+    if (silent) return;   // fuse burnout: effects only — no flash, fanfare, or names
+    flashCheatDot();
+    cheatFanfare(def);
+  }
+
+  // per-frame aura fuse: 90s then a SILENT burnout; aura runs never rank
+  function cheatTick(dt) {
+    if (!activeCheat) return;
+    G.ghostScore = true;
+    cheatT -= dt;
+    if (cheatT <= 0) toggleCheat(activeCheat, true);
   }
 
   function cheatFanfare(def) {
     if (!def) { Sfx.cheat(null); return; }
     G.flash = 0.5;
     G.shake = 14;
-    if (player) {
-      burst(player.x + player.w / 2, player.y + player.h / 2, def.color, 40);
-      addPopup(player.x + player.w / 2, player.y - 16, def.title, def.color);
-    }
-    showBanner("⚡ " + def.title + " ⚡", 2.0);
+    // effects only — the code name is never shown, even mid-ignition
+    if (player) burst(player.x + player.w / 2, player.y + player.h / 2, def.color, 40);
     Sfx.cheat(activeCheat);
   }
 
@@ -468,60 +478,10 @@
       var dot = document.createElement("span");
       dot.className = "aura-dot";
       auraChip.appendChild(dot);
-      auraChip.appendChild(document.createTextNode("⚡" + def.tag));
+      auraChip.appendChild(document.createTextNode("⚡"));   // color + dot only — never the name
     }
-    syncAuraPad();
   }
 
-  // aura pad (mobile/mouse cheat entry): one tap = one toggleCheat, same path as typing
-  var AURA_BLURB = {
-    thunderfist: "INVINCIBLE · ram + 6s shock",
-    kiphnic: "INVINCIBLE · magnet + 2x",
-    kwoffie: "INVINCIBLE · 3x + vacuum + life",
-    zee: "+45% speed · 1.25x",
-    naya: "shield every 8s",
-    ella: "4s phase / 2s solid"
-  };
-  function buildAuraPad() {
-    var grid = $("#auraGrid");
-    if (!grid || grid.children.length) return;
-    CHEAT_WORDS.forEach(function (w) {
-      var def = CHEATS[w];
-      var b = document.createElement("button");
-      b.className = "aura-btn";
-      b.type = "button";
-      b.setAttribute("data-aura", w);
-      b.style.borderColor = def.color;
-      b.style.color = def.color;
-      b.innerHTML = "⚡" + def.tag + "<small>" + (AURA_BLURB[w] || "") + "</small>";
-      b.addEventListener("click", function () {
-        if (activeScreen() === "lobby") return;
-        Sfx.ensure();
-        toggleCheat(w);
-      });
-      grid.appendChild(b);
-    });
-  }
-  function syncAuraPad() {
-    var grid = $("#auraGrid");
-    if (!grid) return;
-    Array.prototype.forEach.call(grid.children, function (b) {
-      b.classList.toggle("on", b.getAttribute("data-aura") === activeCheat);
-    });
-  }
-  function openAuraPad() {
-    if (activeScreen() === "lobby") return;
-    buildAuraPad();
-    syncAuraPad();
-    var pad = $("#auraPad");
-    if (!pad || !pad.hidden) return;
-    if (G.state === "playing") togglePause(true);
-    pad.hidden = false;
-  }
-  function closeAuraPad() {
-    var pad = $("#auraPad");
-    if (pad) pad.hidden = true;
-  }
 
   var WORLD = { w: 960, h: 540 };
   var view = { dpr: 1, scale: 1, ox: 0, oy: 0 };
@@ -595,6 +555,7 @@ var HANGAR = Store.get(K.shipCustom, { shape: "arrow", paint: "cyan", trail: "fu
 if (typeof HANGAR !== "object" || !HANGAR.shape) { HANGAR = DEFAULT_SHIP; Store.set(K.shipCustom, HANGAR); }
 
 function openShipModal() {
+  if (!gateMode("HANGAR", "customize")) return;
   buildPaintChips();
   buildShapeRow();
   buildThumbRow();
@@ -750,15 +711,27 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   function route() {
     var h = (location.hash || "").replace(/^#\/?/, "");
     if (h === "classic") { showScreen("game"); startMode("classic"); }
-    else if (h === "tutorial") { showScreen("game"); startTutorial(); }
+    else if (h === "tutorial") {
+      if (!gateMode("FLIGHT SCHOOL", "tutorial")) { location.hash = ""; return; }
+      showScreen("game"); startTutorial();
+    }
     else if (h === "endless") { showScreen("game"); startMode("endless"); }
-    else if (h === "daily") { showScreen("game"); startMode("endless", { daily: dailyDate() }); }
-    else if (h === "multiplayer") { stopLoop(); G.state = "idle"; hideOverlay(); bannerEl.hidden = true; showScreen("lobby"); refreshHome(); }
+    else if (h === "daily") {
+      if (!gateMode("DAILY RUN", "daily")) { location.hash = ""; return; }
+      showScreen("game"); startMode("endless", { daily: dailyDate() });
+    }
+    else if (h === "multiplayer") {
+      if (!gateMode("MULTIPLAYER", "multiplayer")) { location.hash = ""; return; }
+      stopLoop(); G.state = "idle"; hideOverlay(); bannerEl.hidden = true; showScreen("lobby"); refreshHome();
+    }
     else if (h === "null") {
       if (prog.nullUnlocked) { showScreen("game"); startMode("null"); }
       else location.hash = "";
     }
-    else if (h === "customize") { showScreen("home"); refreshHome(); openShipModal(); }
+    else if (h === "customize") {
+      if (!gateMode("HANGAR", "customize")) { location.hash = ""; return; }
+      showScreen("home"); refreshHome(); openShipModal();
+    }
     else showScreen("home");
   }
   window.addEventListener("hashchange", route);
@@ -1042,7 +1015,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   // No lives lost (damage is absorbed), nothing persists (ghost run).
   var TUT = { idx: 0, active: false, moveX0: 0, trackMove: 0, t0: 0, shardSpawned: 0, shieldSpawned: false };
   var TUT_STEPS = [
-    { id: "move",   title: "MOVE",   text: "Move your ship: A/D, arrow keys, or drag. Travel across the arena to pass." },
+    { id: "move",   title: "MOVE",   text: "Move your ship: arrow keys or drag. Travel across the arena to pass." },
     { id: "dodge",  title: "DODGE",  text: "Hazards are falling! Slip between them — touching one here only rattles you." },
     { id: "graze",  title: "GRAZE",  text: "Skim a block's edge without touching it. Grazes build combo + score!" },
     { id: "shard",  title: "SHARD",  text: "Golden shards incoming — fly into one to collect it." },
@@ -1715,8 +1688,8 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     if (Input.pointerDown) {
       x = (Input.pointerX - view.ox) / (view.scale || 1) - player.w / 2;
     } else {
-      if (Input.keys.ArrowLeft || Input.keys.a) x -= spd * dt;
-      if (Input.keys.ArrowRight || Input.keys.d) x += spd * dt;
+      if (Input.keys.ArrowLeft) x -= spd * dt;
+      if (Input.keys.ArrowRight) x += spd * dt;
     }
     var maxX = player.laneMax || 960;
     player.x = clamp(x, 8, Math.min(960, maxX) - player.w - 8);
@@ -1831,6 +1804,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     // cheat-aura timers + persistent effects
     var cheat = cheatDef();
     if (cheat && G.state === "playing") {
+      cheatTick(dt);
       if (cheat.shockT) {
         cheatShockT -= dt;
         if (cheatShockT <= 0) {
@@ -1845,7 +1819,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
             cheatShieldT = 0;
             G.shield = 1;
             if (player) {
-              addPopup(player.x + player.w / 2, player.y - 10, "NAYA SHIELD", cheat.color);
+              addPopup(player.x + player.w / 2, player.y - 10, "SHIELD", cheat.color);
               burst(player.x + player.w / 2, player.y + player.h / 2, cheat.color, 12);
             }
             Sfx.shieldRegen();
@@ -2673,6 +2647,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   window.addEventListener("keydown", function (e) {
     var k = (e && e.key != null) ? String(e.key) : "";
     if (!k) return;
+    if (e.target && e.target.id === "auraType") return;   // blind pad input owns its keys
     if (k === " " || k === "ArrowLeft" || k === "ArrowRight" || k === "ArrowUp" || k === "ArrowDown") {
       e.preventDefault();
     }
@@ -2768,6 +2743,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   }
 
   function goLobby() {
+    if (!gateMode("MULTIPLAYER", "multiplayer")) return;
     stopLoop();
     Sfx.droneStop();
     G.state = "idle";
@@ -2778,6 +2754,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   }
 
   function startBot(difficulty) {
+    if (!gateMode("MULTIPLAYER", "multiplayer")) return;
     Sfx.ensure();
     difficulty = normalizeBot(difficulty);
     if (location.hash) location.hash = "#/multiplayer";
@@ -2841,17 +2818,33 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
 
   $("#btnLobbyHome").addEventListener("click", goHome);
   $("#btnPause").addEventListener("click", function () { togglePause(); });
+  // ⚡ bolt: summons the OS keyboard into a BLIND hidden field — Enter fires the
+  // word through noteKey, blur returns to the game. The field never echoes.
   var btnAura = $("#btnAura");
   if (btnAura) btnAura.addEventListener("click", function () {
-    var pad = $("#auraPad");
-    if (pad && !pad.hidden) closeAuraPad();
-    else openAuraPad();
+    if (!Auth.ok()) { openAuth("AURA", null); return; }
+    var t = $("#auraType");
+    if (!t) return;
+    if (G.state === "playing") togglePause(true);
+    t.value = "";
+    try { t.focus(); } catch (e) {}
   });
-  var btnAuraClose = $("#btnAuraClose");
-  if (btnAuraClose) btnAuraClose.addEventListener("click", closeAuraPad);
-  var auraPad = $("#auraPad");
-  if (auraPad) auraPad.addEventListener("click", function (e) { if (e.target === auraPad) closeAuraPad(); });
-  buildAuraPad();
+  var auraType = $("#auraType");
+  if (auraType) auraType.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      var v = auraType.value || "";
+      auraType.value = "";
+      for (var vi = 0; vi < v.length; vi++) noteKey(v.charAt(vi));
+      auraType.blur();
+      if (G.state === "paused") togglePause(false);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      auraType.value = "";
+      auraType.blur();
+      if (G.state === "paused") togglePause(false);
+    }
+  });
 
   $("#btnRoom").addEventListener("click", function () {
     var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -2973,7 +2966,7 @@ var LB = {
     if (!entry || G.ghostScore) return;   // cheat/tutorial runs never rank
     var row = {
       mode: entry.mode || G.mode,
-      name: (pilot && pilot.name) || "LUMEN",
+      name: (Auth.ok() && Auth.callsign()) || (pilot && pilot.name) || "LUMEN",
       title: (pilot && pilot.title) || "PIONEER",
       score: Math.max(0, Math.floor(entry.score || 0)),
       time: Math.round((entry.time || 0) * 10) / 10,
@@ -3034,6 +3027,7 @@ function submitRun(won) {
 var lbMode = "endless";
 function renderBoard() {
   var rows = LB.top(lbMode, 10);
+  renderBoard.rows = rows;
   var box = $("#lbRows");
   if (!box) return;
   if (!rows.length) {
@@ -3048,6 +3042,7 @@ function renderBoard() {
         "<span class='lb-title'>" + String(r.title || "").slice(0, 12) + "</span>" +
         "<span class='lb-score'>" + r.score + "</span>" +
         "<span class='lb-detail'>" + detail + (r.won ? "CLEARED" : "") + "</span>" +
+        (Auth.superior() ? "<button class='lb-del' data-i='" + i + "' title='delete'>&#10005;</button>" : "") +
         "</div>";
     }).join("");
   }
@@ -3064,6 +3059,7 @@ function openBoard() {
   renderBoard();
   refreshCloudBoard();
   $("#modalBoard").hidden = false;
+  syncAuthUI();
 }
 function closeBoard() { $("#modalBoard").hidden = true; }
 
@@ -3080,6 +3076,21 @@ function closeBoard() { $("#modalBoard").hidden = true; }
     if (!b) return;
     lbMode = b.dataset.mode;
     renderBoard();
+    Sfx.click();
+  });
+  var rowsBox = $("#lbRows");
+  if (rowsBox) rowsBox.addEventListener("click", function (e) {
+    var db = e.target.closest ? e.target.closest("button.lb-del") : null;
+    if (!db || !Auth.superior()) return;
+    var r = (renderBoard.rows || [])[parseInt(db.getAttribute("data-i"), 10)];
+    if (!r) return;
+    if (r.id != null) deleteCloudRun(r.id);
+    var keep = LB._all().filter(function (x) {
+      return !(x.mode === r.mode && x.name === r.name && x.score === r.score && x.at === r.at);
+    });
+    LB._save(keep);
+    renderBoard();
+    if (typeof superNote === "function") superNote("ROW REMOVED.");
     Sfx.click();
   });
 })();
@@ -3286,13 +3297,198 @@ var CLOUD = {
   }
 };
 
+// ================= accounts (Supabase Auth) =================
+// Callsign = identity. Auth email is synthetic (<callsign>@players…); passwords
+// live only inside Supabase (bcrypt). role comes from profiles — enforced by
+// RLS server-side; this client flag is display-only.
+K.auth = "dodger_auth_v1";
+var AUTH_DOMAIN = "@players.canvasdodger.local";
+function normCs(x) { return String(x).trim().toLowerCase().replace(/\s+/g, ""); }
+function authEmail(cs) { return normCs(cs) + AUTH_DOMAIN; }
+function jwtSub(tok) {
+  try {
+    var p = String(tok).split(".")[1] || "";
+    p = p.replace(/-/g, "+").replace(/_/g, "/");
+    while (p.length % 4) p += "=";
+    var j = JSON.parse(decodeURIComponent(escape(atob(p))));
+    return j.sub || null;
+  } catch (e) { return null; }
+}
+var Auth = {
+  s: null,          // {access_token, refresh_token, expires_at}
+  profile: null,    // {callsign, role}
+  pending: null,    // gated route to open after a successful sign-in
+  load: function () {
+    try {
+      var v = Store.get(K.auth, null);
+      this.s = (v && v.access_token) ? v : null;
+      if (this.s) {
+        var exp = (this.s.expires_at | 0) * 1000;
+        if (exp && exp < Date.now() + 60000 && this.s.refresh_token) this.refresh();
+        else this._me();
+      }
+    } catch (e) {}
+  },
+  ok: function () { return !!(this.s && this.s.access_token); },
+  uid: function () { return this.ok() ? jwtSub(this.s.access_token) : null; },
+  callsign: function () { return (this.profile && this.profile.callsign) || null; },
+  superior: function () { return !!(this.profile && this.profile.role === "superior"); },
+  _save: function () { try { Store.set(K.auth, this.s); } catch (e) {} },
+  hdrs: function (extra) {
+    var h = { "Content-Type": "application/json", "apikey": CLOUD.anon,
+              "Authorization": "Bearer " + (this.ok() ? this.s.access_token : CLOUD.anon) };
+    if (extra) for (var k in extra) h[k] = extra[k];
+    return h;
+  },
+  _me: function () {
+    var self = this;
+    if (!this.ok()) { this.profile = null; syncAuthUI(); return Promise.resolve(null); }
+    try {
+      return fetch(CLOUD.url + "/rest/v1/profiles?user_id=eq." + encodeURIComponent(this.uid() || "") + "&select=callsign,role", { headers: this.hdrs() })
+        .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
+        .then(function (rows) { self.profile = (rows && rows[0]) || null; syncAuthUI(); return self.profile; })
+        .catch(function () { self.profile = null; syncAuthUI(); return null; });
+    } catch (e) { return Promise.resolve(null); }
+  },
+  signup: function (cs, pw) {
+    var self = this;
+    return fetch(CLOUD.url + "/auth/v1/signup", {
+      method: "POST", headers: CLOUD.hdrs(),
+      body: JSON.stringify({ email: authEmail(cs), password: pw, data: { callsign: cs } })
+    }).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok) throw new Error(authErrMsg(r.status, j, "signup"));
+        if (j && j.access_token) { self.s = j; self._save(); return self._me().then(function () { return j; }); }
+        return null;   // confirm-email is ON: account exists, sign in after confirming
+      });
+    });
+  },
+  login: function (cs, pw) {
+    var self = this;
+    return fetch(CLOUD.url + "/auth/v1/token?grant_type=password", {
+      method: "POST", headers: CLOUD.hdrs(),
+      body: JSON.stringify({ email: authEmail(cs), password: pw })
+    }).then(function (r) {
+      return r.json().then(function (j) {
+        if (!r.ok) throw new Error(authErrMsg(r.status, j, "login"));
+        self.s = j; self._save();
+        return self._me().then(function () {
+          var got = self.profile ? normCs(self.profile.callsign) : "";
+          if (got && got !== normCs(cs)) {
+            self.s = null; self._save(); self.profile = null; syncAuthUI();
+            throw new Error("CALLSIGN DOES NOT MATCH THIS ACCOUNT");
+          }
+          return j;
+        });
+      });
+    });
+  },
+  refresh: function () {
+    var self = this;
+    if (!this.s || !this.s.refresh_token) return Promise.resolve(null);
+    try {
+      return fetch(CLOUD.url + "/auth/v1/token?grant_type=refresh_token", {
+        method: "POST", headers: CLOUD.hdrs(),
+        body: JSON.stringify({ refresh_token: this.s.refresh_token })
+      }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error("refresh"); self.s = j; self._save(); return j; });
+      }).then(function () { return self._me(); })
+        .catch(function () { self.s = null; self._save(); self.profile = null; syncAuthUI(); return null; });
+    } catch (e) { return Promise.resolve(null); }
+  },
+  logout: function () {
+    this.s = null; this.profile = null; this._save();
+    // burning an active aura on sign-out keeps ghost-run accounting honest
+    if (typeof toggleCheat === "function" && typeof activeCheat !== "undefined" && activeCheat) toggleCheat(activeCheat, true);
+    syncAuthUI();
+  }
+};
+function authErrMsg(status, j, kind) {
+  var m = ((j && (j.message || j.error_description || j.error)) || "") + "";
+  var low = m.toLowerCase();
+  if (kind === "signup") {
+    if (low.indexOf("email_exists") >= 0 || low.indexOf("already registered") >= 0 ||
+        low.indexOf("already been registered") >= 0 || low.indexOf("user already") >= 0 ||
+        low.indexOf("duplicate key") >= 0 || low.indexOf("profiles") >= 0 || status === 500)
+      return "CALLSIGN TAKEN - SIGN IN INSTEAD";
+    if (low.indexOf("weak") >= 0 || (low.indexOf("password") >= 0 && low.indexOf("least") >= 0))
+      return "PASSWORD TOO SHORT (6+ CHARS)";
+    return "CREATE FAILED - TRY ANOTHER CALLSIGN";
+  }
+  return "WRONG CALLSIGN OR PASSWORD";
+}
+
+// ---- login gate for DAILY / FLIGHT SCHOOL / MULTIPLAYER / HANGAR / AURA ----
+function gateMode(reason, pend) {
+  if (Auth.ok()) return true;
+  openAuth(reason, pend);
+  return false;
+}
+function openAuth(reason, pend) {
+  Auth.pending = pend || null;
+  var m = $("#modalAuth");
+  var r = $("#authReason");
+  if (r) r.textContent = reason ? (reason + " — SIGN IN REQUIRED.") : "SIGN IN TO FLY.";
+  var msg = $("#authMsg");
+  if (msg) msg.textContent = "New pilot? Tap CREATE. One callsign — one account.";
+  var pw = $("#authPass");
+  if (pw) pw.value = "";
+  if (m) {
+    m.hidden = false;
+    var cs = $("#authCallsign");
+    if (cs) { try { cs.focus(); } catch (e) {} }
+  }
+}
+function closeAuth() {
+  var m = $("#modalAuth");
+  if (m) m.hidden = true;
+}
+function authNote(t) {
+  var msg = $("#authMsg");
+  if (msg) msg.textContent = t;
+}
+function doAuth(kind) {
+  var cs = String(($("#authCallsign") && $("#authCallsign").value) || "").trim().replace(/\s+/g, " ");
+  var pw = ($("#authPass") && $("#authPass").value) || "";
+  if (!/^[A-Za-z0-9 _-]{3,14}$/.test(cs)) { authNote("CALLSIGN: 3-14 LETTERS, DIGITS, SPACE, _ -"); Sfx.lose(); return; }
+  if (String(pw).length < 6) { authNote("PASSWORD: 6+ CHARS"); Sfx.lose(); return; }
+  authNote(kind === "signup" ? "CREATING…" : "SIGNING IN…");
+  var p = kind === "signup" ? Auth.signup(cs, pw) : Auth.login(cs, pw);
+  p.then(function (j) {
+    if (kind === "signup" && !j) { authNote("ACCOUNT CREATED - NOW TAP SIGN IN."); return; }
+    var pend = Auth.pending;
+    Auth.pending = null;
+    closeAuth();
+    Sfx.win();
+    syncAuthUI();
+    if (pend) location.hash = "#/" + pend;
+  }).catch(function (e) {
+    authNote((e && e.message) || "TRY AGAIN");
+    Sfx.lose();
+  });
+}
+function syncAuthUI() {
+  try {
+    var inb = $("#authStatus");
+    if (inb) inb.textContent = Auth.ok() ? ("SIGNED IN AS " + String(Auth.callsign() || "?").toUpperCase()) : "NOT SIGNED IN";
+    var bo = $("#btnAuthOpen"); if (bo) bo.hidden = Auth.ok();
+    var bd = $("#btnAuthOut"); if (bd) bd.hidden = !Auth.ok();
+    var bg = $("#superBadge"); if (bg) bg.hidden = !Auth.superior();
+    var sb = $("#superBox"); if (sb) sb.hidden = !Auth.superior();
+    var d1 = $("#btnDevPickup"); if (d1) d1.hidden = !Auth.superior();
+    var d2 = $("#btnDevScore"); if (d2) d2.hidden = !Auth.superior();
+    var mb = $("#modalBoard");
+    if (mb && !mb.hidden) renderBoard();
+  } catch (e) {}
+}
+
 LB.remote = {
   submit: function (row) {   // fire-and-forget: local save already happened
-    if (!CLOUD.on || !row) return;
+    if (!CLOUD.on || !row || !Auth.ok()) return;   // cloud board is sign-in only (RLS)
     try {
       fetch(CLOUD.url + "/rest/v1/runs", {
         method: "POST",
-        headers: CLOUD.hdrs({ "Prefer": "return=minimal" }),
+        headers: Auth.hdrs({ "Prefer": "return=minimal" }),
         body: JSON.stringify([{
           mode: row.mode, name: row.name, title: row.title, score: row.score,
           time: row.time, rank: row.rank, won: !!row.won, date: row.date || "", at: row.at | 0
@@ -3302,9 +3498,9 @@ LB.remote = {
   },
   top: function (mode, n) {   // async: resolves rows, rejects -> caller keeps local
     if (!CLOUD.on) return Promise.reject(new Error("cloud off"));
-    var q = "select=mode,name,title,score,time,rank,won,date,at&order=score.desc,at.asc&limit=" + (n || 10);
+    var q = "select=id,mode,name,title,score,time,rank,won,date,at&order=score.desc,at.asc&limit=" + (n || 10);
     if (mode) q += "&mode=eq." + encodeURIComponent(mode);
-    return fetch(CLOUD.url + "/rest/v1/runs?" + q, { headers: CLOUD.hdrs() }).then(function (r) {
+    return fetch(CLOUD.url + "/rest/v1/runs?" + q, { headers: Auth.hdrs() }).then(function (r) {
       if (!r.ok) throw new Error("http " + r.status);
       return r.json();
     }).then(function (rows) { return Array.isArray(rows) ? rows : []; });
@@ -3325,11 +3521,12 @@ function refreshCloudBoard() {
 Passport.remote = {
   push: function (payload) {
     if (!CLOUD.on || !payload) return Promise.reject(new Error("cloud off"));
+    if (!Auth.ok()) return Promise.reject(new Error("sign in first"));
     var cs = String((payload.pilot && payload.pilot.name) || (pilot && pilot.name) || "").replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 14);
     if (!cs) return Promise.reject(new Error("no callsign"));
     return fetch(CLOUD.url + "/rest/v1/passports?on_conflict=callsign", {
       method: "POST",
-      headers: CLOUD.hdrs({ "Prefer": "resolution=merge-duplicates" }),
+      headers: Auth.hdrs({ "Prefer": "resolution=merge-duplicates" }),
       body: JSON.stringify([{ callsign: cs, payload: payload, updated_at: Date.now() }])
     }).then(function (r) { if (!r.ok) throw new Error("http " + r.status); return true; });
   },
@@ -3338,7 +3535,7 @@ Passport.remote = {
     cs = String(cs || (pilot && pilot.name) || "").replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 14);
     if (!cs) return Promise.reject(new Error("no callsign"));
     return fetch(CLOUD.url + "/rest/v1/passports?callsign=eq." + encodeURIComponent(cs) + "&select=payload",
-      { headers: CLOUD.hdrs() }).then(function (r) {
+      { headers: Auth.hdrs() }).then(function (r) {
       if (!r.ok) throw new Error("http " + r.status);
       return r.json();
     }).then(function (rows) { return (rows && rows[0] && rows[0].payload) || null; });
@@ -3378,6 +3575,88 @@ Passport.remote = {
     });
   });
 })();
+
+// ---- superior console: board wipe / row delete / roles / dev toys ----
+function superNote(t) {
+  var el = $("#superMsg");
+  if (el) { el.textContent = t; el.hidden = !t; }
+}
+function deleteCloudRun(id) {
+  if (!Auth.ok() || id == null) return;
+  fetch(CLOUD.url + "/rest/v1/runs?id=eq." + id, { method: "DELETE", headers: Auth.hdrs() })
+    .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
+    .then(function (n) {
+      superNote((n && n.length) ? ("DELETED " + n.length + " CLOUD ROW(S).") : "DENIED — SUPERIOR ONLY.");
+      refreshCloudBoard();
+    })
+    .catch(function () { superNote("DELETE FAILED — RUN THE V2 MIGRATION."); });
+}
+(function wireSuperior() {
+  var wipe = $("#btnWipe");
+  if (wipe) wipe.addEventListener("click", function () {
+    if (!Auth.superior()) return;
+    var w = prompt("TYPE WIPE TO CLEAR THE " + String(lbMode).toUpperCase() + " CLOUD TAB");
+    if (!w || String(w).trim().toLowerCase() !== "wipe") { superNote("WIPE CANCELLED."); return; }
+    fetch(CLOUD.url + "/rest/v1/runs?mode=eq." + encodeURIComponent(lbMode), { method: "DELETE", headers: Auth.hdrs() })
+      .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
+      .then(function (n) { superNote("WIPED " + (n ? n.length : 0) + " ROW(S) FROM " + lbMode.toUpperCase() + "."); refreshCloudBoard(); })
+      .catch(function () { superNote("WIPE FAILED — SUPERIOR ONLY (RUN V2 MIGRATION)."); });
+  });
+  function setRole(up) {
+    if (!Auth.superior()) return;
+    var cs = String(($("#roleCallsign") && $("#roleCallsign").value) || "").trim();
+    if (!cs) { superNote("ENTER A CALLSIGN."); return; }
+    fetch(CLOUD.url + "/rest/v1/profiles?callsign=eq." + encodeURIComponent(cs) + "&select=user_id,role", { headers: Auth.hdrs() })
+      .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
+      .then(function (rows) {
+        var row = rows && rows[0];
+        if (!row) { superNote("NO PILOT NAMED " + cs.toUpperCase() + "."); return; }
+        return fetch(CLOUD.url + "/rest/v1/profiles?user_id=eq." + row.user_id, {
+          method: "PATCH",
+          headers: Auth.hdrs({ "Prefer": "return=representation" }),
+          body: JSON.stringify({ role: up ? "superior" : "player" })
+        }).then(function (r2) {
+          if (!r2.ok) throw new Error("http " + r2.status);
+          superNote(cs.toUpperCase() + " → " + (up ? "SUPERIOR" : "PLAYER"));
+        });
+      })
+      .catch(function () { superNote("ROLE CHANGE FAILED — SUPERIOR ONLY."); });
+  }
+  var pr = $("#btnPromote"); if (pr) pr.addEventListener("click", function () { setRole(true); });
+  var dmn = $("#btnDemote"); if (dmn) dmn.addEventListener("click", function () { setRole(false); });
+  var wds = $("#btnDevWords");
+  if (wds) wds.addEventListener("click", function () {
+    if (!Auth.superior()) return;
+    superNote("WORDS: " + CHEAT_WORDS.join(" · ") + "  (90s fuse — aura runs never rank)");
+  });
+  var dp = $("#btnDevPickup");
+  if (dp) dp.addEventListener("click", function () {
+    if (!Auth.superior() || G.state !== "playing") return;
+    spawnPickup();
+    showBanner("✦", 0.7);
+    Sfx.blip();
+  });
+  var dsc = $("#btnDevScore");
+  if (dsc) dsc.addEventListener("click", function () {
+    if (!Auth.superior()) return;
+    var v = prompt("SET SCORE", Math.floor(G.score));
+    if (v == null) return;
+    var n = parseInt(v, 10);
+    if (n >= 0 && n < 100000000) { G.score = n; Sfx.blip(); }
+  });
+})();
+(function wireAuthUI() {
+  var op = $("#btnAuthOpen"); if (op) op.addEventListener("click", function () { openAuth("", null); Sfx.click(); });
+  var ou = $("#btnAuthOut"); if (ou) ou.addEventListener("click", function () { Auth.logout(); Sfx.click(); });
+  var cc = $("#btnAuthCancel"); if (cc) cc.addEventListener("click", function () { closeAuth(); Sfx.click(); });
+  var li = $("#btnAuthLogin"); if (li) li.addEventListener("click", function () { doAuth("login"); });
+  var cr = $("#btnAuthCreate"); if (cr) cr.addEventListener("click", function () { doAuth("signup"); });
+  var ap = $("#authPass");
+  if (ap) ap.addEventListener("keydown", function (e) { if (e.key === "Enter") doAuth("login"); });
+  var am = $("#modalAuth");
+  if (am) am.addEventListener("click", function (e) { if (e.target === am) closeAuth(); });
+})();
+try { Auth.load(); syncAuthUI(); } catch (e) {}
 
   route();
   window.addEventListener("load", fitCanvas);
