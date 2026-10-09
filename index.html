@@ -26,6 +26,7 @@
       <div class="sys-actions">
         <button class="icon-btn btn-mute" aria-label="Toggle sound" title="Toggle sound (M)">&#9834;</button>
         <button class="icon-btn btn-full" aria-label="Toggle fullscreen" title="Fullscreen (F)">&#x26F6;</button>
+        <button class="icon-btn" id="btnPilot" aria-label="Pilot profile" title="Pilot profile">&#9632;</button>
       </div>
       <div class="eyebrow"></div>
       <h1 class="glitch" data-text="CANVAS // DODGER">CANVAS // DODGER</h1>
@@ -85,6 +86,49 @@
     <div class="home-foot">
       <button class="ghost-btn" id="btnHowto">HOW TO PLAY</button>
       <button class="ghost-btn" id="btnInstall" hidden>&#128187; INSTALL APP</button>
+    </div>
+
+    <div class="pilot-bar" id="pilotBar">
+      <div class="pilot-avatar" id="pilotAvatar" title="Click to change avatar">&#9632;</div>
+      <div class="pilot-meta">
+        <div class="pilot-name" id="pilotName">LUMEN</div>
+        <div class="pilot-title" id="pilotTitle">PIONEER</div>
+      </div>
+      <button class="ghost-btn tiny" id="btnPilotEdit">EDIT</button>
+      <input type="file" id="pilotFile" accept="image/*" hidden>
+    </div>
+
+    <div class="pilot-panel" id="pilotPanel" hidden>
+      <div class="panel">
+        <h3>YOUR PILOT</h3>
+        <div class="pilot-row">
+          <div class="pilot-avatar big" id="pilotAvatarBig">&#9632;</div>
+          <div class="pilot-fields">
+            <label for="pilotNameInput">CALLSIGN</label>
+            <input class="text" id="pilotNameInput" maxlength="14" placeholder="Callsign" value="LUMEN">
+            <label for="pilotTitleInput">TITLE</label>
+            <select class="text" id="pilotTitleInput">
+              <option value="PIONEER">PIONEER</option>
+              <option value="NIGHTWATCH">NIGHTWATCH</option>
+              <option value="VOIDFLYER">VOIDFLYER</option>
+              <option value="SHARPTAIL">SHARPTAIL</option>
+              <option value="TRACER">TRACER</option>
+              <option value="WATCHER">WATCHER</option>
+            </select>
+          </div>
+        </div>
+        <div class="pilot-upload-row">
+          <label class="pilot-upload">
+            <input type="file" id="pilotFile2" accept="image/*" hidden>
+            <span class="upload-label">&#128195; UPLOAD PHOTO</span>
+          </label>
+          <span class="hint">stored on this device only</span>
+        </div>
+        <div class="bar-actions">
+          <button class="ghost-btn" id="btnPilotPanelClose">CANCEL</button>
+          <button class="ghost-btn primary" id="btnPilotPanelSave">SAVE</button>
+        </div>
+      </div>
     </div>
   </div>
 

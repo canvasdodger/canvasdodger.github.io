@@ -643,3 +643,46 @@ h1.glitch::after { color: var(--cyan); animation: glitch-b 2.7s infinite steps(1
 h1.small { margin: 8px 0 4px; font-family: var(--font-display); font-size: clamp(1.4rem, 4vw, 2.2rem); letter-spacing: 0.1em; }
 .tagline { margin: 0; color: var(--dim); font-size: 1.05rem; letter-spacing: 0.12em; text-transform: uppercase; }
 
+/* ================= pilot profile (Phase 4) ================= */
+.pilot-bar {
+  display: flex; align-items: center; gap: 12px;
+  position: relative; margin-top: 22px;
+  padding: 10px 14px;
+  background: rgba(10, 14, 34, 0.85);
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  border-radius: 12px;
+  max-width: 340px; margin-left: auto; margin-right: auto;
+}
+.pilot-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: #10163a; border: 2px solid var(--cyan);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--cyan); font-size: 1.1rem;
+  background-size: cover; background-position: center;
+  cursor: pointer; flex: 0 0 auto;
+}
+.pilot-avatar.big { width: 64px; height: 64px; font-size: 1.6rem; border-width: 3px; }
+.pilot-meta { flex: 1 1 auto; min-width: 0; }
+.pilot-name { font-weight: 700; letter-spacing: 0.1em; color: var(--cyan); }
+.pilot-title { font-size: 0.75rem; letter-spacing: 0.18em; color: var(--dim); text-transform: uppercase; }
+.ghost-btn.tiny { padding: 4px 10px; font-size: 0.72rem; }
+.pilot-panel { position: fixed; inset: 0; z-index: 45; display: flex; align-items: center; justify-content: center; background: rgba(4, 6, 18, 0.82); }
+.pilot-panel[hidden] { display: none; }
+.pilot-panel .panel { width: min(92vw, 380px); }
+.pilot-row { display: flex; gap: 16px; align-items: center; margin: 12px 0; }
+.pilot-fields { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.pilot-fields label { font-size: 0.7rem; letter-spacing: 0.16em; color: var(--dim); }
+.pilot-fields .text, input.text, select.text {
+  background: #0a0e22; color: #eaf6ff;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  border-radius: 8px; padding: 8px 10px; font: inherit;
+}
+.pilot-upload-row { display: flex; align-items: center; gap: 10px; margin: 10px 0 16px; }
+.pilot-upload { cursor: pointer; }
+.upload-label {
+  display: inline-block; padding: 7px 12px; font-size: 0.8rem;
+  border: 1px dashed rgba(0, 240, 255, 0.5); border-radius: 8px; color: var(--cyan);
+}
+.pilot-upload-row .hint { font-size: 0.72rem; color: var(--dim); }
+.bar-actions { display: flex; justify-content: flex-end; gap: 10px; }
+

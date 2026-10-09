@@ -31,7 +31,8 @@
     botWins: "dodger_bot_wins_v1",
     bestNull: "dodger_best_null_v1",
     mute: "dodger_mute_v1",
-    tutorial: "dodger_tutorial_v1"
+    tutorial: "dodger_tutorial_v1",
+    shipCustom: "dodger_ship_v1"
   };
 
   // per-bot win keys (v2); legacy single counter migrates to easy
@@ -123,6 +124,10 @@
         var delay = n[5] || 0;
         setTimeout(function () { self.tone(n[0], n[1], n[2], n[3], n[4]); }, delay);
       });
+    },
+    click: function () {
+      // UI click: same as blip (alias kept for customizer/pilot handlers)
+      Sfx.blip();
     },
     // signature fanfare per cheat aura id (null = power-down)
     cheat: function (id) {
@@ -388,10 +393,8 @@
           Sfx.lifeGift();
         }
       } else {
-        // aura off: restore the ship's natural color for this mode/sector
-        var fallback = "#00f0ff";
-        if (G.sector && G.sector.palette) fallback = G.sector.palette.accent;
-        player.color = fallback;
+        // aura off: restore the ship's own paint job
+        player.color = paintById(player.paint || HANGAR.paint).hex;
       }
     }
     flashCheatDot();
@@ -530,6 +533,47 @@
     if (name === "home") refreshHome();
     syncAuraChip();
   }
+  // ================= ship customizer data =================
+  var SHIP_SHAPES = [
+    { id: "arrow", label: "ARROW", icon: "▶" },
+    { id: "dart",  label: "DART",  icon: "◄" },
+    { id: "wasp",  label: "WASP",  icon: "⚡" },
+    { id: "orb",   label: "ORB",   icon: "◎" },
+    { id: "fang",  label: "FANG",  icon: "⚔" },
+    { id: "veil",  label: "VEIL",  icon: "⌘" }
+  ];
+  var PAINTS = [
+    { id: "cyan",   name: "CYAN",   hex: "#00f0ff" },
+    { id: "lime",   name: "LIME",   hex: "#5dff9a" },
+    { id: "magenta",name: "MAGENTA",hex: "#ff2bd6" },
+    { id: "amber",  name: "AMBER",  hex: "#ffb454" },
+    { id: "violet", name: "VIOLET", hex: "#b18cff" },
+    { id: "rose",   name: "ROSE",   hex: "#ff5d8a" },
+    { id: "ice",    name: "ICE",    hex: "#eaf6ff" },
+    { id: "slate",  name: "SLATE",  hex: "#8d9bff" }
+  ];
+  var TRAILS = ["full", "short", "wisp"];
+  var FLAIR = ["trim only", "rings", "wings", "crown"];
+  var DEFAULT_SHIP = { shape: "arrow", paint: "cyan", trail: "full", flair: 0 };
+  function paintById(id) {
+    for (var i = 0; i < PAINTS.length; i++) if (PAINTS[i].id === id) return PAINTS[i];
+    return PAINTS[0];
+  }
+  function shapeLabel(id) {
+    for (var i = 0; i < SHIP_SHAPES.length; i++) if (SHIP_SHAPES[i].id === id) return SHIP_SHAPES[i].label;
+    return "ARROW";
+  }
+  function hexRgba(hex, a) {
+    var h = String(hex || "#00f0ff").replace("#", "");
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    var n = parseInt(h, 16);
+    if (isNaN(n)) n = 0x00f0ff;
+    return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+  }
+  function hangarColor(fallback) {
+    return paintById(HANGAR && HANGAR.paint).hex || fallback || "#00f0ff";
+  }
+
 // ================= ship customizer (HANGAR) =================
 var HANGAR = Store.get(K.shipCustom, { shape: "arrow", paint: "cyan", trail: "full", flair: 0 });
 if (typeof HANGAR !== "object" || !HANGAR.shape) { HANGAR = DEFAULT_SHIP; Store.set(K.shipCustom, HANGAR); }
@@ -540,11 +584,15 @@ function openShipModal() {
   buildThumbRow();
   var sc = { shape: HANGAR.shape, paint: HANGAR.paint, trail: HANGAR.trail, flair: HANGAR.flair };
   setShipControls(sc);
+  $$("input[name=flair]").forEach(function (r) { r.checked = (Number(r.value) === (HANGAR.flair || 0)); });
   $("#modalShip").hidden = false;
   try { document.querySelector("#modalShip").scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
 }
 
-function closeShipModal() { $("#modalShip").hidden = true; }
+function closeShipModal() {
+  $("#modalShip").hidden = true;
+  if (location.hash === "#/customize") location.hash = "";
+}
 
 function buildPaintChips() {
   var c = $("#paintChips");
@@ -567,7 +615,7 @@ function buildShapeRow() {
     var d = document.createElement("div");
     d.className = "shape-cell";
     d.dataset.id = SHIP_SHAPES[i].id;
-    d.innerHTML = "<div class="shp-" + SHIP_SHAPES[i].id + ""></div><div class="shp-" + SHIP_SHAPES[i].id + " shn">" + SHIP_SHAPES[i].label + "</div>";
+    d.innerHTML = '<div class="sd">' + SHIP_SHAPES[i].icon + '</div><div class="sn">' + SHIP_SHAPES[i].label + '</div>';
     d.title = "Select for your ship";
     d.addEventListener("click", function () { pickShape(this.dataset.id); });
     r.appendChild(d);
@@ -583,7 +631,7 @@ function buildThumbRow() {
     t.style.background = PAINTS[i].hex;
     t.style.color = PAINTS[i].hex;
     t.dataset.id = PAINTS[i].id;
-    t.innerHTML = "<span class="t-label">" + PAINTS[i].name + "</span>";
+    t.innerHTML = '<span class="t-label">' + PAINTS[i].name + '</span>';
     t.addEventListener("click", function () { pickPaint(this.dataset.id); });
     r.appendChild(t);
   }
@@ -612,14 +660,18 @@ function setShipControls(sc) {
   HANGAR = sc;
   var sh = sc.shape || "arrow";
   var pt = sc.paint || "cyan";
-  $(".shape-cell[data-id='" + sh + "']").classList.add("on");
-  $(".paint-chip[data-id='" + pt + "'], .thumb[data-id='" + pt + "']").classList.add("on");
+  $$(".shape-cell.on").forEach(function (el) { el.classList.remove("on"); });
+  $$(".paint-chip.on, .thumb.on").forEach(function (el) { el.classList.remove("on"); });
+  var se = $(".shape-cell[data-id='" + sh + "']"); if (se) se.classList.add("on");
+  $$(".paint-chip[data-id='" + pt + "'], .thumb[data-id='" + pt + "']").forEach(function (el) { el.classList.add("on"); });
 }
 function saveShip() {
-  HANGAR.flair = parseInt(($("input[name=flair]:checked") || {}).value || "0", 10) || 0;
+  var fl = $("input[name=flair]:checked");
+  HANGAR.flair = parseInt((fl && fl.value) || "0", 10) || 0;
   Store.set(K.shipCustom, HANGAR);
   closeShipModal();
-  if (G.mode) { startMode(G.mode); } else { goHome(); }
+  refreshHome();
+  Sfx.click();
 }
 
 // ================= ship customizer wiring =================
@@ -627,7 +679,7 @@ var bs = $("#btnShipDone");
 if (bs) bs.addEventListener("click", saveShip);
 var bc = $("#btnShipClose");
 if (bc) bc.addEventListener("click", closeShipModal);
-window.addEventListener("keydown", function (e) { if (e.key === "6") openShipModal(); });
+window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScreen() === "home") location.hash = "#/customize"; });
 
   function campaignSectors() {
     return SECTORS.filter(function (s) { return !s.secret; });
@@ -657,6 +709,9 @@ window.addEventListener("keydown", function (e) { if (e.key === "6") openShipMod
     $("#metaEndless").textContent = "BEST — " + Store.get(K.bestEndless, 0);
     var wins = getBotWins().total;
     $("#metaBot").textContent = "VS BOT — " + wins + " WIN" + (wins === 1 ? "" : "S");
+    var ms = $("#metaShip");
+    if (ms) ms.textContent = shapeLabel(HANGAR.shape) + " // " + paintById(HANGAR.paint).name
+      + " // " + (FLAIR[HANGAR.flair] || "trim only");
     var per = getBotWins().per;
     $$("[data-botwins]").forEach(function (el) {
       var bid = el.getAttribute("data-botwins");
@@ -681,7 +736,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6") openShipMod
       if (prog.nullUnlocked) { showScreen("game"); startMode("null"); }
       else location.hash = "";
     }
-    else if (h === "customize") { showScreen("game"); openShipModal(); }
+    else if (h === "customize") { showScreen("home"); refreshHome(); openShipModal(); }
     else showScreen("home");
   }
   window.addEventListener("hashchange", route);
@@ -819,8 +874,22 @@ window.addEventListener("keydown", function (e) { if (e.key === "6") openShipMod
     return cd ? cd.ship : fallback;
   }
 
-  function makeShip(x, color) {
-    return { x: x, y: 470, w: 54, h: 26, speed: 560, color: color, invuln: 0, trail: [] };
+  function makeShip(x, color, opts) {
+    opts = opts || {};
+    return {
+      x: x, y: 470, w: 54, h: 26, speed: 560,
+      color: color, invuln: 0, trail: [],
+      shape: opts.shape || "arrow",
+      paint: opts.paint || "cyan",
+      trailKind: opts.trailKind || "full",
+      flair: opts.flair || 0
+    };
+  }
+  function makePlayer(x, color) {
+    return makeShip(x, color, {
+      shape: HANGAR.shape, paint: HANGAR.paint,
+      trailKind: HANGAR.trail, flair: HANGAR.flair
+    });
   }
 
   function tierMax() {
@@ -886,7 +955,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6") openShipMod
       G.timeLeft = G.sector.objective.time;
       G.spawnGap = G.sector.pattern === "boss" ? 9 : 0.85;
       G.phaseIdx = 0;
-      player = makeShip(453, cheatShipColor(G.sector.palette.accent));
+      player = makePlayer(453, cheatShipColor(paintById(HANGAR.paint).hex));
       showScreen("game");
       briefing();
       return;
@@ -899,7 +968,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6") openShipMod
       G.spawnGap = 0.8;
       G.phaseIdx = 0;
       G.phaseClock = 0;
-      player = makeShip(453, cheatShipColor("#00f0ff"));
+      player = makePlayer(453, cheatShipColor(paintById(HANGAR.paint).hex));
       beginPlay();
       return;
     }
@@ -913,7 +982,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6") openShipMod
       G.phaseIdx = 0;
       G.phaseClock = 0;
       G.ghostScore = true;   // tutorial never touches ranks/bests
-      player = makeShip(453, cheatShipColor("#5dff9a"));
+      player = makePlayer(453, cheatShipColor(paintById(HANGAR.paint).hex));
       showScreen("game");
       startTutorialSteps();
       beginPlay();
@@ -927,7 +996,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6") openShipMod
       G.spawnGap = 0.75;
       G.phaseIdx = 0;
       var spec = BOT_SPECS[G.difficulty] || BOT_SPECS.easy;
-      player = makeShip(200, cheatShipColor("#00f0ff"));
+      player = makePlayer(200, cheatShipColor(paintById(HANGAR.paint).hex));
       player.laneMax = 440;
       G.bot = {
         ship: makeShip(700, "#ff2bd6"),
@@ -2102,7 +2171,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6") openShipMod
       t.t -= 0.016;
       var a = t.t < 0 ? 0 : t.t;
       ctx.fillStyle = cheatTrail ? "rgba(" + cheatTrail.trail + "," + (a * 0.5) + ")"
-        : "rgba(0,240,255," + (a * 0.5) + ")";
+        : hexRgba(s.color || "#00f0ff", a * 0.5);
       ctx.fillRect(t.x - 3, t.y, 6, 8);
     }
     if (s.invuln > 0 && Math.floor(performance.now() / 90) % 2 === 0) return;
@@ -2113,20 +2182,133 @@ window.addEventListener("keydown", function (e) { if (e.key === "6") openShipMod
     if (cheatTrail && s === player) { ctx.shadowColor = cheatTrail.glow; ctx.shadowBlur = 26; }
     else if (cheatTrail) { ctx.shadowColor = s.color; ctx.shadowBlur = 18; }
     else { ctx.shadowColor = s.color; ctx.shadowBlur = 18; }
+
+
+    // ---- ship shape ----
+    var sh = s.shape || "arrow";
+    var px = s.x, py = s.y, pw = s.w, ph = s.h;
     ctx.fillStyle = s.color;
-    roundRect(s.x, s.y, s.w, s.h, 9);
-    ctx.fillStyle = "rgba(2,10,24,0.85)";
-    ctx.fillRect(s.x + s.w / 2 - 7, s.y + 5, 14, s.h - 10);
-    ctx.fillStyle = "#ffb454";
-    var flick = 6 + Math.random() * 8;
-    ctx.beginPath();
-    ctx.moveTo(s.x + 10, s.y + s.h);
-    ctx.lineTo(s.x + 16, s.y + s.h + flick);
-    ctx.lineTo(s.x + 22, s.y + s.h);
-    ctx.moveTo(s.x + s.w - 22, s.y + s.h);
-    ctx.lineTo(s.x + s.w - 16, s.y + s.h + flick);
-    ctx.lineTo(s.x + s.w - 10, s.y + s.h);
-    ctx.fill();
+    if (sh === "arrow") {
+      roundRect(px, py, pw, ph, 9);
+      ctx.fillStyle = "rgba(2,10,24,0.85)";
+      ctx.fillRect(px + pw / 2 - 7, py + 5, 14, ph - 10);
+      ctx.fillStyle = "#ffb454";
+      var flick = 6 + Math.random() * 8;
+      ctx.beginPath();
+      ctx.moveTo(px + 10, py + ph);
+      ctx.lineTo(px + 16, py + ph + flick);
+      ctx.lineTo(px + 22, py + ph);
+      ctx.moveTo(px + pw - 22, py + ph);
+      ctx.lineTo(px + pw - 16, py + ph + flick);
+      ctx.lineTo(px + pw - 10, py + ph);
+      ctx.fill();
+    } else if (sh === "dart") {
+      ctx.beginPath();
+      ctx.moveTo(px + pw / 2, py);
+      ctx.lineTo(px + pw - 18, py + ph);
+      ctx.lineTo(px + 18, py + ph);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(2,10,24,0.85)";
+      ctx.fillRect(px + 10, py + ph / 2 - 5, pw - 20, 10);
+      ctx.fillStyle = "#ffb454";
+      ctx.fillRect(px + 14, py + ph - 6, pw - 28, 6);
+    } else if (sh === "wasp") {
+      ctx.beginPath();
+      ctx.moveTo(px + 30, py + 4);
+      ctx.lineTo(px + pw - 38, py + ph - 6);
+      ctx.lineTo(px + pw - 42, py + ph + 4);
+      ctx.lineTo(px + pw / 2, py + ph + 6);
+      ctx.lineTo(px + 42, py + ph + 4);
+      ctx.lineTo(px + 38, py + ph - 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(2,10,24,0.85)";
+      ctx.fillRect(px + 6, py + ph / 2 - 5, pw - 12, 10);
+      ctx.fillStyle = "#ffb454";
+      ctx.fillRect(px + 12, py + ph - 7, pw - 24, 5);
+    } else if (sh === "orb") {
+      ctx.beginPath();
+      ctx.arc(px + pw / 2, py + ph / 2, pw / 2 - 3, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "rgba(2,10,24,0.85)";
+      ctx.fillRect(px + 8, py + 8, pw - 16, ph - 16);
+      ctx.fillStyle = "#ffb454";
+      ctx.beginPath();
+      ctx.arc(px + pw / 2, py + ph / 2, pw / 2 - 9, 0, TAU);
+      ctx.strokeStyle = "#ffb454";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    } else if (sh === "fang") {
+      ctx.beginPath();
+      ctx.moveTo(px + pw / 2, py);
+      ctx.lineTo(px + pw - 22, py + ph);
+      ctx.lineTo(px + pw - 12, py + ph - 6);
+      ctx.lineTo(px + pw - 20, py + ph - 4);
+      ctx.lineTo(px + 12, py + ph);
+      ctx.lineTo(px + 20, py + ph - 6);
+      ctx.lineTo(px + 10, py + ph - 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(2,10,24,0.85)";
+      ctx.fillRect(px + 10, py + 8, pw - 20, ph - 16);
+      ctx.fillStyle = "#ffb454";
+      ctx.fillRect(px + 14, py + ph - 7, pw - 28, 5);
+    } else if (sh === "veil") {
+      ctx.beginPath();
+      ctx.arc(px + pw / 2, py + ph / 2, pw / 2 - 3, Math.PI * 0.05, Math.PI * 0.95);
+      ctx.arc(px + pw / 2, py + ph / 2, 5, Math.PI * 0.05, Math.PI * 0.95);
+      ctx.fill();
+      ctx.fillStyle = "rgba(2,10,24,0.85)";
+      ctx.fillRect(px + 6, py + ph / 2 - 4, pw - 12, ph - 8);
+      ctx.fillStyle = "#ffb454";
+      ctx.fillRect(px + 12, py + ph - 7, pw - 24, 5);
+    }
+    // ---- flair decorations ----
+    var fl = s.flair || 0;
+    if (fl >= 1) {
+      var rr = pw / 2 - 2;
+      for (var r = 1; r <= 2; r++) {
+        ctx.beginPath();
+        ctx.arc(px + pw / 2, py + ph / 2, rr * r, 0, TAU);
+        ctx.strokeStyle = "rgba(255,180,84,0.22)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+    if (fl >= 2) {
+      ctx.fillStyle = "rgba(255,180,84,0.35)";
+      ctx.beginPath();
+      ctx.moveTo(px + pw / 2 - 9, py + 8);
+      ctx.lineTo(px + pw / 2 - 18, py + ph - 6);
+      ctx.lineTo(px + pw / 2 - 8, py + ph - 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(px + pw / 2 + 9, py + 8);
+      ctx.lineTo(px + pw / 2 + 18, py + ph - 6);
+      ctx.lineTo(px + pw / 2 + 8, py + ph - 4);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if (fl >= 3) {
+      var cx = px + pw / 2;
+      ctx.fillStyle = "#ffd75d";
+      var spikes = 5;
+      var hi = ph * 0.35;
+      for (var k = 0; k < spikes; k++) {
+        var ang = -Math.PI / 2 + (k / spikes) * Math.PI * 2;
+        var ex = cx + Math.cos(ang) * (pw / 4 + 2);
+        var ey = py + 6 + Math.sin(ang) * hi;
+        ctx.beginPath();
+        ctx.moveTo(cx, py + 6);
+        ctx.lineTo(ex - 3, ey);
+        ctx.lineTo(ex + 3, ey);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
     ctx.restore();
 
     if (label) {
@@ -2628,6 +2810,90 @@ window.addEventListener("keydown", function (e) { if (e.key === "6") openShipMod
   syncMuteBtns();
   fitCanvas();
   refreshHome();
+// ================= pilot profile (Phase 4) =================
+var K2 = K; K2.pilot = "dodger_pilot_v1";
+var pilot = Store.get(K2.pilot, { name: "LUMEN", title: "PIONEER", avatar: "" });
+if (!pilot || typeof pilot !== "object") pilot = { name: "LUMEN", title: "PIONEER", avatar: "" };
+if (!pilot.name) pilot.name = "LUMEN";
+if (!pilot.title) pilot.title = "PIONEER";
+function savePilot() { Store.set(K2.pilot, pilot); }
+
+function paintAvatar(el, big) {
+  if (!el) return;
+  if (pilot.avatar) {
+    el.style.backgroundImage = "url(" + pilot.avatar + ")";
+    el.textContent = "";
+  } else {
+    el.style.backgroundImage = "none";
+    el.textContent = (pilot.name || "L").charAt(0).toUpperCase();
+  }
+  if (big) el.title = pilot.name + " // " + pilot.title;
+}
+
+function renderPilot() {
+  var n = $("#pilotName"), t = $("#pilotTitle");
+  if (n) n.textContent = pilot.name;
+  if (t) t.textContent = pilot.title;
+  paintAvatar($("#pilotAvatar"));
+  paintAvatar($("#pilotAvatarBig"), true);
+}
+
+function openPilotPanel() {
+  $("#pilotNameInput").value = pilot.name;
+  $("#pilotTitleInput").value = pilot.title;
+  paintAvatar($("#pilotAvatarBig"), true);
+  $("#pilotPanel").hidden = false;
+}
+
+function closePilotPanel() { $("#pilotPanel").hidden = true; }
+
+function savePilotPanel() {
+  var v = $("#pilotNameInput").value.replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 14);
+  pilot.name = v || "LUMEN";
+  pilot.title = $("#pilotTitleInput").value || "PIONEER";
+  savePilot();
+  renderPilot();
+  closePilotPanel();
+  Sfx.click();
+}
+
+function loadAvatarFile(input) {
+  var f = input.files && input.files[0];
+  if (!f) return;
+  if (!/^image\//.test(f.type)) return;
+  var fr = new FileReader();
+  fr.onload = function () {
+    var img = new Image();
+    img.onload = function () {
+      var c = document.createElement("canvas");
+      var S = 96; c.width = S; c.height = S;
+      var cx = c.getContext("2d");
+      var s = Math.min(img.width, img.height);
+      cx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, S, S);
+      pilot.avatar = c.toDataURL("image/jpeg", 0.82);
+      savePilot();
+      renderPilot();
+      paintAvatar($("#pilotAvatarBig"), true);
+      Sfx.click();
+    };
+    img.src = fr.result;
+  };
+  fr.readAsDataURL(f);
+  input.value = "";
+}
+
+(function wirePilot() {
+  renderPilot();
+  var e = $("#btnPilotEdit"); if (e) e.addEventListener("click", openPilotPanel);
+  var hp = $("#btnPilot"); if (hp) hp.addEventListener("click", openPilotPanel);
+  var a = $("#pilotAvatar"); if (a) a.addEventListener("click", openPilotPanel);
+  var s = $("#btnPilotPanelSave"); if (s) s.addEventListener("click", savePilotPanel);
+  var c = $("#btnPilotPanelClose"); if (c) c.addEventListener("click", closePilotPanel);
+  var f1 = $("#pilotFile"); if (f1) f1.addEventListener("change", function () { loadAvatarFile(this); });
+  var f2 = $("#pilotFile2"); if (f2) f2.addEventListener("change", function () { loadAvatarFile(this); });
+  var av2 = $("#pilotAvatarBig"); if (av2) av2.addEventListener("click", function () { var fi = $("#pilotFile2"); if (fi) fi.click(); });
+})();
+
   route();
   window.addEventListener("load", fitCanvas);
   // ================= tutorial coach / buttons =================
@@ -2643,5 +2909,6 @@ window.addEventListener("keydown", function (e) { if (e.key === "6") openShipMod
     else if (act === "tut-home") { tutSkip(); goHome(); }
   });
 })();
+
 
 
