@@ -20,6 +20,20 @@
     };
   }
 
+  // daily challenge: local-date string + FNV-1a seed so every pilot flies
+  // the same storm on the same day
+  var DAILY_SECS = 120;
+  function dailyDate(d) {
+    d = d || new Date();
+    var m = d.getMonth() + 1, day = d.getDate();
+    return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+  }
+  function dailySeed(str) {
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+
   function aabb(a, b) {
     return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   }
@@ -32,7 +46,8 @@
     bestNull: "dodger_best_null_v1",
     mute: "dodger_mute_v1",
     tutorial: "dodger_tutorial_v1",
-    shipCustom: "dodger_ship_v1"
+    shipCustom: "dodger_ship_v1",
+    dailyBest: "dodger_daily_best_v1"
   };
 
   // per-bot win keys (v2); legacy single counter migrates to easy
@@ -708,6 +723,11 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       ? "ALL SECTORS CLEARED — " + rankSummary()
       : "NEXT — SECTOR 0" + next;
     $("#metaEndless").textContent = "BEST — " + Store.get(K.bestEndless, 0);
+    var md = $("#metaDaily");
+    if (md) {
+      var db = Store.get(K.dailyBest, {});
+      md.textContent = "BEST TODAY — " + ((db && db[dailyDate()]) | 0);
+    }
     var wins = getBotWins().total;
     $("#metaBot").textContent = "VS BOT — " + wins + " WIN" + (wins === 1 ? "" : "S");
     var ms = $("#metaShip");
@@ -732,6 +752,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     if (h === "classic") { showScreen("game"); startMode("classic"); }
     else if (h === "tutorial") { showScreen("game"); startTutorial(); }
     else if (h === "endless") { showScreen("game"); startMode("endless"); }
+    else if (h === "daily") { showScreen("game"); startMode("endless", { daily: dailyDate() }); }
     else if (h === "multiplayer") { stopLoop(); G.state = "idle"; hideOverlay(); bannerEl.hidden = true; showScreen("lobby"); refreshHome(); }
     else if (h === "null") {
       if (prog.nullUnlocked) { showScreen("game"); startMode("null"); }
@@ -843,7 +864,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     shake: 0, flash: 0,
     graze: 0, shards: 0, combo: 0, comboT: 0,
     ghostScore: false, won: false,
-    bot: null, seed: 0, rng: null
+    bot: null, seed: 0, rng: null, daily: null
   };
 
   var player = null;
@@ -916,6 +937,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   function startMode(mode, opts) {
     opts = opts || {};
     G.mode = mode;
+    G.daily = opts.daily || null;
     G.difficulty = normalizeBot(opts.difficulty || G.difficulty);
     G.score = 0;
     G.elapsed = 0;
@@ -934,7 +956,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     cheatLifeGiven = false;
     if (activeCheat) Sfx.droneStart(activeCheat); else Sfx.droneStop();
     G.won = false;
-    G.seed = (Math.random() * 0xffffffff) >>> 0;
+    G.seed = G.daily ? dailySeed(G.daily) : (Math.random() * 0xffffffff) >>> 0;
     G.rng = makeRng(G.seed);
     G.pkTmr = 4;
     G.shardTmr = 0;
@@ -1156,7 +1178,8 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     lastT = performance.now();
     hudStatus.textContent = "LIVE";
     Sfx.blip();
-    if (G.mode === "endless") showBanner(PHASES[0].name, 1.4);
+    if (G.daily) showBanner("DAILY — " + G.daily, 1.6);
+    else if (G.mode === "endless") showBanner(PHASES[0].name, 1.4);
     if (G.mode === "multiplayer") showBanner("RACE — LAST ALIVE WINS", 1.6);
     if (G.mode === "null") showBanner("NULL PROTOCOL", 1.6);
     startLoop();
@@ -1301,7 +1324,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
         G.portalT = 3;
         var px1 = 80 + r() * 320, px2 = 560 + r() * 320;
         var py = -30;
-        var pair = (Math.random() * 0xffffff) | 0;
+        var pair = (r() * 0xffffff) | 0;
         obstacles.push({ x: px1, y: py, w: 54, h: 54, vy: blockSpeed() * 0.55, vx: 0,
           type: "portal", color: pal.accent, grazed: true, portalPair: pair });
         obstacles.push({ x: px2, y: py - 130, w: 54, h: 54, vy: blockSpeed() * 0.55, vx: 0,
@@ -1320,10 +1343,11 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     var weighted = keys.slice();
     if (tm >= 2) weighted = weighted.concat(TIER_KEYS[2]);
     if (tm >= 3) weighted = weighted.concat(TIER_KEYS[3]);
-    var kind = pick(weighted);
+    var r = G.rng;   // schedule-critical draws stay on the seeded stream (daily fairness)
+    var kind = weighted[(r() * weighted.length) | 0];
     var spec = POWERUPS[kind];
-    var px = rand(30, 930);
-    if (G.mode === "multiplayer") px = rand(30, 400);   // player lane only — bot doesn't use power-ups
+    var px = 30 + r() * 900;
+    if (G.mode === "multiplayer") px = 30 + r() * 370;   // player lane only — bot doesn't use power-ups
     pickups.push({ x: px, y: -20, w: 24, h: 24, vy: 130, kind: kind, color: spec.color });
   }
 
@@ -1592,6 +1616,15 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
 
     if (G.mode === "endless") {
       var sc2 = Math.floor(G.score);
+      if (G.daily) {
+        showOverlay(
+          '<h2 class="win">DAILY CLEARED</h2><div class="stats"><span>SCORE ' + sc2 + "</span><span>" + G.daily + "</span></div>" +
+          '<div class="btn-row"><button class="ghost-btn primary" data-act="retry">RUN AGAIN</button>' +
+          '<button class="ghost-btn" data-act="home">HOME</button></div>'
+        );
+        hudStatus.textContent = "CLEARED";
+        return;
+      }
       var bestE = Store.get(K.bestEndless, 0);
       if (!G.ghostScore && sc2 > bestE) Store.set(K.bestEndless, sc2);
       showOverlay(
@@ -1632,12 +1665,20 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       return;
     }
     if (G.mode === "endless") {
+      var sc = Math.floor(G.score);
+      if (G.daily) {
+        showOverlay(
+          '<h2 class="lose">STORM WINS</h2><div class="stats"><span>SCORE ' + sc + "</span><span>" + G.daily + "</span></div>" +
+          '<div class="btn-row"><button class="ghost-btn primary" data-act="retry">RUN AGAIN</button>' +
+          '<button class="ghost-btn" data-act="home">HOME</button></div>'
+        );
+        return;
+      }
       var bestE = Store.get(K.bestEndless, 0);
       if (!G.ghostScore && sc > bestE) Store.set(K.bestEndless, sc);
       showOverlay('<h2 class="lose">STORM WINS</h2><div class="stats"><span>SCORE ' + sc + "</span><span>PHASE " + (G.phaseIdx + 1) + "</span></div>" +
-        '<div class="btn-row"><button class="ghost-btn primary" data-act="retry">RETRY</button>' +
+        '<div class="btn-row"><button class="ghost-btn primary" data-act="retry">RUN AGAIN</button>' +
         '<button class="ghost-btn" data-act="home">HOME</button></div>');
-      hudStatus.textContent = "DOWN";
       return;
     }
     if (G.mode === "multiplayer") {
@@ -1773,6 +1814,11 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   // ================= update =================
   function updatePlay(dt) {
     G.elapsed += dt;
+    if (G.daily && G.elapsed >= DAILY_SECS) {
+      G.elapsed = DAILY_SECS;
+      winRun();
+      return;
+    }
 
     var tkeys = ["slowT", "freezeT", "magnetT", "phaseUpT", "x2T", "overT"];
     for (var ti = 0; ti < tkeys.length; ti++) {
@@ -1859,7 +1905,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     if (G.spawnT >= gap) {
       G.spawnT = 0;
       var pat = currentPattern();
-      if (pat !== "boss") spawnPattern(pat);
+      if (pat !== "boss") spawnPattern(pat, G.rng);
     }
     if (G.mode === "tutorial") {
       tutScript(dt);   // scripted shards/shield + step checks
@@ -1872,7 +1918,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     }
 
     G.pkTmr -= dt;
-    if (G.pkTmr <= 0) { G.pkTmr = rand(6, 9); spawnPickup(); }
+    if (G.pkTmr <= 0) { G.pkTmr = 6 + G.rng() * 3; spawnPickup(); }
 
     var speedScale = 1;
     if (G.slowT > 0) speedScale *= 0.45;
@@ -2650,6 +2696,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       if (k === "2") location.hash = "#/endless";
       if (k === "3") location.hash = "#/multiplayer";
       if (k === "4" && prog.nullUnlocked) location.hash = "#/null";
+      if (k === "5") location.hash = "#/daily";
     }
     if (activeScreen() === "lobby") {
       if (k === "q" || k === "Q") startBot("easy");
@@ -2750,6 +2797,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       var mode = G.mode;
       var opts = { difficulty: G.difficulty };
       if (mode === "classic" && G.sector) opts.sector = G.sector.id;
+      if (G.daily) opts.daily = G.daily;
       startMode(mode, opts);
     } else if (act === "next") {
       hideOverlay();
@@ -2931,6 +2979,7 @@ var LB = {
       time: Math.round((entry.time || 0) * 10) / 10,
       rank: entry.rank || "",
       won: !!entry.won,
+      date: entry.date || "",
       at: Date.now()
     };
     var list = this._all();
@@ -2954,8 +3003,16 @@ var LB = {
 
 function submitRun(won) {
   if (G.mode === "tutorial") return;
+  if (G.daily && activeCheat) return;   // cheat runs never score on the daily board
+  if (G.daily && !G.ghostScore) {
+    var db = Store.get(K.dailyBest, {});
+    if (!db || typeof db !== "object") db = {};
+    var dsc = Math.floor(G.score);
+    if (dsc > (db[G.daily] | 0)) { db[G.daily] = dsc; Store.set(K.dailyBest, db); }
+  }
   LB.submit({
-    mode: G.mode,
+    mode: G.daily ? "daily" : G.mode,
+    date: G.daily || "",
     score: G.score,
     time: G.elapsed,
     won: won,
@@ -2973,7 +3030,7 @@ function renderBoard() {
   } else {
     box.innerHTML = rows.map(function (r, i) {
       var medal = i === 0 ? "★" : (i === 1 ? "☆" : (i + 1));
-      var detail = r.rank ? r.rank + " · " : (r.time ? r.time + "s · " : "");
+      var detail = (r.date ? r.date + " · " : "") + (r.rank ? r.rank + " · " : (r.time ? r.time + "s · " : ""));
       return "<div class='lb-row'>" +
         "<span class='lb-pos'>" + medal + "</span>" +
         "<span class='lb-name'>" + String(r.name).slice(0, 14) + "</span>" +
@@ -3040,7 +3097,8 @@ var Passport = {
       bests: { endless: Store.get(K.bestEndless, 0), null: Store.get(K.bestNull, 0) },
       botWins: per,
       tutorial: !!Store.get(K.tutorial, {}).done,
-      lb: LB._all()
+      lb: LB._all(),
+      dailyBest: Store.get(K.dailyBest, {})
     };
   },
   encode: function (payload) {
@@ -3129,6 +3187,16 @@ var Passport = {
       if (merged.length > LB.LIMIT) merged = merged.slice(0, LB.LIMIT);
       LB._save(merged);
       summary.scoresLB = Math.max(0, merged.length - before);
+    }
+    if (p.dailyBest && typeof p.dailyBest === "object") {
+      var dbp = Store.get(K.dailyBest, {}) || {};
+      var dbc = false;
+      for (var ddate in p.dailyBest) {
+        if (!Object.prototype.hasOwnProperty.call(p.dailyBest, ddate)) continue;
+        var dv = p.dailyBest[ddate] | 0;
+        if (dv > (dbp[ddate] | 0)) { dbp[ddate] = dv; dbc = true; }
+      }
+      if (dbc) Store.set(K.dailyBest, dbp);
     }
     saveProgress();
     savePilot();
