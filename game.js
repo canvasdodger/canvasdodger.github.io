@@ -1540,6 +1540,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   function winRun() {
     G.state = "over";
     G.won = true;
+    submitRun(true);
     Sfx.droneStop();
     Sfx.win();
     G.flash = 0.5;
@@ -1606,6 +1607,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
 
   function loseRun() {
     G.state = "over";
+    submitRun(false);
     Sfx.droneStop();
     Sfx.lose();
     var sc = Math.floor(G.score);
@@ -2904,6 +2906,113 @@ function loadAvatarFile(input) {
   var f2 = $("#pilotFile2"); if (f2) f2.addEventListener("change", function () { loadAvatarFile(this); });
   var av2 = $("#pilotAvatarBig"); if (av2) av2.addEventListener("click", function () { var fi = $("#pilotFile2"); if (fi) fi.click(); });
 })();
+
+// ================= leaderboard (Phase 5: local-first seam) =================
+// Interface: LB.submit(entry) / LB.top(mode, n) -> entries. Backends:
+//   - "local": localStorage (always on, works offline/static hosting)
+//   - LB.remote: optional { submit(entry), top(mode, n) } — a Firebase/
+//     Supabase adapter plugs in here without touching game code.
+K.lb = "dodger_lb_v1";
+var LB = {
+  remote: null,   // set to { submit: fn, top: fn } when a cloud backend lands
+  LIMIT: 25,
+  _all: function () {
+    var v = Store.get(K.lb, []);
+    return Array.isArray(v) ? v : [];
+  },
+  _save: function (list) { Store.set(K.lb, list); },
+  submit: function (entry) {
+    if (!entry || G.ghostScore) return;   // cheat/tutorial runs never rank
+    var row = {
+      mode: entry.mode || G.mode,
+      name: (pilot && pilot.name) || "LUMEN",
+      title: (pilot && pilot.title) || "PIONEER",
+      score: Math.max(0, Math.floor(entry.score || 0)),
+      time: Math.round((entry.time || 0) * 10) / 10,
+      rank: entry.rank || "",
+      won: !!entry.won,
+      at: Date.now()
+    };
+    var list = this._all();
+    list.push(row);
+    list.sort(function (a, b) { return b.score - a.score || a.at - b.at; });
+    if (list.length > this.LIMIT) list = list.slice(0, this.LIMIT);
+    this._save(list);
+    if (this.remote && typeof this.remote.submit === "function") {
+      try { this.remote.submit(row); } catch (e) {}   // cloud push is fire-and-forget
+    }
+    return row;
+  },
+  top: function (mode, n) {
+    n = n || 10;
+    var rows = this._all().filter(function (r) { return !mode || r.mode === mode; });
+    rows.sort(function (a, b) { return b.score - a.score || a.at - b.at; });
+    return rows.slice(0, n);
+  },
+  clear: function () { this._save([]); }
+};
+
+function submitRun(won) {
+  if (G.mode === "tutorial") return;
+  LB.submit({
+    mode: G.mode,
+    score: G.score,
+    time: G.elapsed,
+    won: won,
+    rank: (G.mode === "classic" && won) ? computeRank() : ""
+  });
+}
+
+var lbMode = "endless";
+function renderBoard() {
+  var rows = LB.top(lbMode, 10);
+  var box = $("#lbRows");
+  if (!box) return;
+  if (!rows.length) {
+    box.innerHTML = "<p class='lb-empty'>NO RUNS LOGGED — FLY ONE.</p>";
+  } else {
+    box.innerHTML = rows.map(function (r, i) {
+      var medal = i === 0 ? "★" : (i === 1 ? "☆" : (i + 1));
+      var detail = r.rank ? r.rank + " · " : (r.time ? r.time + "s · " : "");
+      return "<div class='lb-row'>" +
+        "<span class='lb-pos'>" + medal + "</span>" +
+        "<span class='lb-name'>" + String(r.name).slice(0, 14) + "</span>" +
+        "<span class='lb-title'>" + String(r.title || "").slice(0, 12) + "</span>" +
+        "<span class='lb-score'>" + r.score + "</span>" +
+        "<span class='lb-detail'>" + detail + (r.won ? "CLEARED" : "") + "</span>" +
+        "</div>";
+    }).join("");
+  }
+  var tabs = $("#lbTabs");
+  if (tabs) Array.prototype.forEach.call(tabs.children, function (b) {
+    b.classList.toggle("on", b.dataset.mode === lbMode);
+  });
+  var src = $("#lbSource");
+  if (src) src.textContent = LB.remote ? "SOURCE: CLOUD" : "SOURCE: THIS DEVICE";
+}
+function openBoard() {
+  renderBoard();
+  $("#modalBoard").hidden = false;
+}
+function closeBoard() { $("#modalBoard").hidden = true; }
+
+(function wireBoard() {
+  var btn = $("#btnBoard"); if (btn) btn.addEventListener("click", openBoard);
+  var close = $("#btnBoardClose"); if (close) close.addEventListener("click", closeBoard);
+  var clear = $("#btnBoardClear");
+  if (clear) clear.addEventListener("click", function () { LB.clear(); renderBoard(); Sfx.click(); });
+  var mb = $("#modalBoard");
+  if (mb) mb.addEventListener("click", function (e) { if (e.target === mb) closeBoard(); });
+  var tabs = $("#lbTabs");
+  if (tabs) tabs.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-mode]");
+    if (!b) return;
+    lbMode = b.dataset.mode;
+    renderBoard();
+    Sfx.click();
+  });
+})();
+
 
   route();
   window.addEventListener("load", fitCanvas);

@@ -85,6 +85,7 @@
 
     <div class="home-foot">
       <button class="ghost-btn" id="btnHowto">HOW TO PLAY</button>
+      <button class="ghost-btn" id="btnBoard">LEADERBOARD</button>
       <button class="ghost-btn" id="btnInstall" hidden>&#128187; INSTALL APP</button>
     </div>
 
@@ -281,6 +282,26 @@
       <p class="story">Tap a code to ignite its aura. Tap again to switch off. One aura at a time.</p>
       <div class="aura-grid" id="auraGrid"></div>
       <button class="ghost-btn" id="btnAuraClose">CLOSE</button>
+    </div>
+  </div>
+
+  <!-- ================= LEADERBOARD ================= -->
+  <div class="modal" id="modalBoard" hidden>
+    <div class="panel">
+      <h3>LEADERBOARD</h3>
+      <p class="story">Best logged runs. Ties break by earliest run.</p>
+      <div class="lb-tabs" id="lbTabs">
+        <button class="ghost-btn tiny" data-mode="endless" type="button">ENDLESS</button>
+        <button class="ghost-btn tiny" data-mode="classic" type="button">CLASSIC</button>
+        <button class="ghost-btn tiny" data-mode="multiplayer" type="button">RACES</button>
+        <button class="ghost-btn tiny" data-mode="null" type="button">NULL</button>
+      </div>
+      <div class="lb-rows" id="lbRows"></div>
+      <div class="lb-foot">
+        <span id="lbSource">SOURCE: THIS DEVICE</span>
+        <button class="ghost-btn" id="btnBoardClear" type="button">CLEAR MY SCORES</button>
+      </div>
+      <button class="ghost-btn" id="btnBoardClose" type="button">CLOSE</button>
     </div>
   </div>
 

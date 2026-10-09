@@ -686,3 +686,26 @@ h1.small { margin: 8px 0 4px; font-family: var(--font-display); font-size: clamp
 .pilot-upload-row .hint { font-size: 0.72rem; color: var(--dim); }
 .bar-actions { display: flex; justify-content: flex-end; gap: 10px; }
 
+/* ================= LEADERBOARD ================= */
+.lb-tabs { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 10px 0 14px; }
+.lb-tabs .ghost-btn.on { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 8px rgba(0, 240, 255, 0.35); }
+.lb-rows { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; margin-bottom: 12px; }
+.lb-row {
+  display: grid; grid-template-columns: 34px 1fr auto auto; grid-template-areas: "pos name score detail" "pos title score detail";
+  align-items: center; gap: 2px 10px;
+  padding: 7px 10px; border: 1px solid rgba(0, 240, 255, 0.18); border-radius: 6px;
+  background: rgba(8, 14, 34, 0.6); font-size: 0.8rem;
+}
+.lb-pos { grid-area: pos; color: var(--cyan); font-weight: 700; text-align: center; }
+.lb-name { grid-area: name; font-weight: 600; }
+.lb-title { grid-area: title; font-size: 0.68rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
+.lb-score { grid-area: score; color: var(--amber, #ffd166); font-weight: 700; font-variant-numeric: tabular-nums; }
+.lb-detail { grid-area: detail; font-size: 0.66rem; color: var(--dim); justify-self: end; }
+.lb-empty { text-align: center; color: var(--dim); font-size: 0.8rem; padding: 18px 0; letter-spacing: 0.1em; }
+.lb-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+.lb-foot #lbSource { font-size: 0.66rem; color: var(--dim); letter-spacing: 0.1em; }
+@media (max-width: 520px) {
+  .lb-row { grid-template-columns: 26px 1fr auto; grid-template-areas: "pos name score" "pos title score" "pos detail detail"; }
+  .lb-detail { justify-self: start; }
+}
+
