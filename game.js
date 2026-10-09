@@ -2908,9 +2908,8 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   if (rj) rj.addEventListener("click", function () { NetRival.join(); });
   var onlineBack = $("#btnOnlineBack");
   if (onlineBack) onlineBack.addEventListener("click", function () {
-    NetRival.leave();
     Sfx.blip();
-    location.hash = "#/multiplayer";
+    goHome();
   });
 
 
