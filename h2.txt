@@ -1,0 +1,55 @@
+function buildShapeRow() {
+  var r = $("#shapeRow");
+  r.innerHTML = "";
+  for (var i = 0; i < SHIP_SHAPES.length; i++) {
+    var d = document.createElement("div");
+    d.className = "shape-cell";
+    d.dataset.id = SHIP_SHAPES[i].id;
+    d.innerHTML = "<div class="shp-" + SHIP_SHAPES[i].id + ""></div><div class="shp-" + SHIP_SHAPES[i].id + " shn">" + SHIP_SHAPES[i].label + "</div>";
+    d.title = "Select for your ship";
+    d.addEventListener("click", function () { pickShape(this.dataset.id); });
+    r.appendChild(d);
+  }
+}
+
+function buildThumbRow() {
+  var r = $("#thumbRow");
+  r.innerHTML = "";
+  for (var i = 0; i < PAINTS.length; i++) {
+    var t = document.createElement("button");
+    t.className = "thumb";
+    t.style.background = PAINTS[i].hex;
+    t.style.color = PAINTS[i].hex;
+    t.dataset.id = PAINTS[i].id;
+    t.innerHTML = "<span class="t-label">" + PAINTS[i].name + "</span>";
+    t.addEventListener("click", function () { pickPaint(this.dataset.id); });
+    r.appendChild(t);
+  }
+}
+
+function pickPaint(id) {
+  var css = ".paint-chip[data-id='" + id + "'], .thumb[data-id='" + id + "']";
+  $(css).classList.remove("on");
+  $(css).classList.add("on");
+  HANGAR.paint = id;
+  if (HANGAR.shape) { HANGAR.trail = HANGAR.trail || "full"; HANGAR.flair = HANGAR.flair || 0; }
+  setShipControls({ shape: HANGAR.shape, paint: id, trail: HANGAR.trail, flair: HANGAR.flair });
+}
+
+function pickShape(id) {
+  var shapes = SHIP_SHAPES;
+  for (var i = 0; i < shapes.length; i++) {
+    var el = $(".shape-cell[data-id='" + shapes[i].id + "']");
+    el.classList.toggle("on", shapes[i].id === id);
+  }
+  HANGAR.shape = id;
+  if (!HANGAR.paint) { pickPaint(HANGAR.paint); }
+}
+
+function setShipControls(sc) {
+  HANGAR = sc;
+  var sh = sc.shape || "arrow";
+  var pt = sc.paint || "cyan";
+  $(".shape-cell[data-id='" + sh + "']").classList.add("on");
+  $(".paint-chip[data-id='" + pt + "'], .thumb[data-id='" + pt + "']").classList.add("on");
+}

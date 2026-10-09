@@ -530,104 +530,6 @@
     if (name === "home") refreshHome();
     syncAuraChip();
   }
-// ================= ship customizer (HANGAR) =================
-var HANGAR = Store.get(K.shipCustom, { shape: "arrow", paint: "cyan", trail: "full", flair: 0 });
-if (typeof HANGAR !== "object" || !HANGAR.shape) { HANGAR = DEFAULT_SHIP; Store.set(K.shipCustom, HANGAR); }
-
-function openShipModal() {
-  buildPaintChips();
-  buildShapeRow();
-  buildThumbRow();
-  var sc = { shape: HANGAR.shape, paint: HANGAR.paint, trail: HANGAR.trail, flair: HANGAR.flair };
-  setShipControls(sc);
-  $("#modalShip").hidden = false;
-  try { document.querySelector("#modalShip").scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
-}
-
-function closeShipModal() { $("#modalShip").hidden = true; }
-
-function buildPaintChips() {
-  var c = $("#paintChips");
-  c.innerHTML = "";
-  for (var i = 0; i < PAINTS.length; i++) {
-    var b = document.createElement("button");
-    b.className = "paint-chip";
-    b.style.background = PAINTS[i].hex;
-    b.style.color = PAINTS[i].hex;
-    b.dataset.id = PAINTS[i].id;
-    b.textContent = PAINTS[i].name;
-    b.addEventListener("click", function () { pickPaint(this.dataset.id); });
-    c.appendChild(b);
-  }
-}
-function buildShapeRow() {
-  var r = $("#shapeRow");
-  r.innerHTML = "";
-  for (var i = 0; i < SHIP_SHAPES.length; i++) {
-    var d = document.createElement("div");
-    d.className = "shape-cell";
-    d.dataset.id = SHIP_SHAPES[i].id;
-    d.innerHTML = "<div class="shp-" + SHIP_SHAPES[i].id + ""></div><div class="shp-" + SHIP_SHAPES[i].id + " shn">" + SHIP_SHAPES[i].label + "</div>";
-    d.title = "Select for your ship";
-    d.addEventListener("click", function () { pickShape(this.dataset.id); });
-    r.appendChild(d);
-  }
-}
-
-function buildThumbRow() {
-  var r = $("#thumbRow");
-  r.innerHTML = "";
-  for (var i = 0; i < PAINTS.length; i++) {
-    var t = document.createElement("button");
-    t.className = "thumb";
-    t.style.background = PAINTS[i].hex;
-    t.style.color = PAINTS[i].hex;
-    t.dataset.id = PAINTS[i].id;
-    t.innerHTML = "<span class="t-label">" + PAINTS[i].name + "</span>";
-    t.addEventListener("click", function () { pickPaint(this.dataset.id); });
-    r.appendChild(t);
-  }
-}
-
-function pickPaint(id) {
-  var css = ".paint-chip[data-id='" + id + "'], .thumb[data-id='" + id + "']";
-  $(css).classList.remove("on");
-  $(css).classList.add("on");
-  HANGAR.paint = id;
-  if (HANGAR.shape) { HANGAR.trail = HANGAR.trail || "full"; HANGAR.flair = HANGAR.flair || 0; }
-  setShipControls({ shape: HANGAR.shape, paint: id, trail: HANGAR.trail, flair: HANGAR.flair });
-}
-
-function pickShape(id) {
-  var shapes = SHIP_SHAPES;
-  for (var i = 0; i < shapes.length; i++) {
-    var el = $(".shape-cell[data-id='" + shapes[i].id + "']");
-    el.classList.toggle("on", shapes[i].id === id);
-  }
-  HANGAR.shape = id;
-  if (!HANGAR.paint) { pickPaint(HANGAR.paint); }
-}
-
-function setShipControls(sc) {
-  HANGAR = sc;
-  var sh = sc.shape || "arrow";
-  var pt = sc.paint || "cyan";
-  $(".shape-cell[data-id='" + sh + "']").classList.add("on");
-  $(".paint-chip[data-id='" + pt + "'], .thumb[data-id='" + pt + "']").classList.add("on");
-}
-function saveShip() {
-  HANGAR.flair = parseInt(($("input[name=flair]:checked") || {}).value || "0", 10) || 0;
-  Store.set(K.shipCustom, HANGAR);
-  closeShipModal();
-  if (G.mode) { startMode(G.mode); } else { goHome(); }
-}
-
-// ================= ship customizer wiring =================
-var bs = $("#btnShipDone");
-if (bs) bs.addEventListener("click", saveShip);
-var bc = $("#btnShipClose");
-if (bc) bc.addEventListener("click", closeShipModal);
-window.addEventListener("keydown", function (e) { if (e.key === "6") openShipModal(); });
 
   function campaignSectors() {
     return SECTORS.filter(function (s) { return !s.secret; });
@@ -681,7 +583,6 @@ window.addEventListener("keydown", function (e) { if (e.key === "6") openShipMod
       if (prog.nullUnlocked) { showScreen("game"); startMode("null"); }
       else location.hash = "";
     }
-    else if (h === "customize") { showScreen("game"); openShipModal(); }
     else showScreen("home");
   }
   window.addEventListener("hashchange", route);
@@ -2643,5 +2544,3 @@ window.addEventListener("keydown", function (e) { if (e.key === "6") openShipMod
     else if (act === "tut-home") { tutSkip(); goHome(); }
   });
 })();
-
-

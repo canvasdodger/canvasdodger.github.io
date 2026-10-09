@@ -57,6 +57,14 @@
         <span class="launch">LAUNCH <kbd>2</kbd></span>
       </article>
 
+      <article class="mode-card" tabindex="0" data-goto="customize">
+        <div class="card-icon">&#9632;</div>
+        <h2>HANGAR</h2>
+        <p>Pick your shape, paint, and paint job. Every run starts in your own ship.</p>
+        <div class="card-meta"><span id="metaShip">--</span></div>
+        <span class="launch">OPEN <kbd>6</kbd></span>
+      </article>
+
       <article class="mode-card" tabindex="0" data-goto="multiplayer">
         <div class="card-icon">&#9876;</div>
         <h2>MULTIPLAYER</h2>
@@ -178,6 +186,27 @@
 
       <div class="overlay" id="overlay" hidden>
         <div class="panel" id="overlayPanel"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CUSTOMIZER MODAL ================= -->
+  <div class="modal" id="modalShip" hidden>
+    <div class="panel">
+      <h3>YOUR SHIP</h3>
+      <p class="story">Choose a shape, then paint and paint job. Your pick resets each run.</p>
+      <div class="paint-chips" id="paintChips"></div>
+      <div class="shape-row" id="shapeRow"></div>
+      <div class="paint-row">
+        <label class="opt"><input type="radio" name="flair" value="0" checked> trim only</label>
+        <label class="opt"><input type="radio" name="flair" value="1"> rings</label>
+        <label class="opt"><input type="radio" name="flair" value="2"> wings</label>
+        <label class="opt"><input type="radio" name="flair" value="3"> crown</label>
+      </div>
+      <div class="thumb-row" id="thumbRow"></div>
+      <div class="btn-row" style="justify-content:center">
+        <button class="ghost-btn" id="btnShipClose">CLOSE</button>
+        <button class="ghost-btn primary" id="btnShipDone">TAKE TO FLIGHT</button>
       </div>
     </div>
   </div>

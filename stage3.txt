@@ -1,0 +1,53 @@
+    // ---- flair decorations ----
+    var fl = s.flair || 0;
+    if (fl >= 1) {
+      var rr = pw / 2 - 2;
+      for (var r = 1; r <= 2; r++) {
+        ctx.beginPath();
+        ctx.arc(px + pw / 2, py + ph / 2, rr * r, 0, TAU);
+        ctx.strokeStyle = "rgba(255,180,84,0.22)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+    if (fl >= 2) {
+      ctx.fillStyle = "rgba(255,180,84,0.35)";
+      ctx.beginPath();
+      ctx.moveTo(px + pw / 2 - 9, py + 8);
+      ctx.lineTo(px + pw / 2 - 18, py + ph - 6);
+      ctx.lineTo(px + pw / 2 - 8, py + ph - 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(px + pw / 2 + 9, py + 8);
+      ctx.lineTo(px + pw / 2 + 18, py + ph - 6);
+      ctx.lineTo(px + pw / 2 + 8, py + ph - 4);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if (fl >= 3) {
+      var cx = px + pw / 2;
+      ctx.fillStyle = "#ffd75d";
+      var spikes = 5;
+      var hi = ph * 0.35;
+      for (var k = 0; k < spikes; k++) {
+        var ang = -Math.PI / 2 + (k / spikes) * Math.PI * 2;
+        var ex = cx + Math.cos(ang) * (pw / 4 + 2);
+        var ey = py + 6 + Math.sin(ang) * hi;
+        ctx.beginPath();
+        ctx.moveTo(cx, py + 6);
+        ctx.lineTo(ex - 3, ey);
+        ctx.lineTo(ex + 3, ey);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+
+    if (label) {
+      ctx.fillStyle = s.color;
+      ctx.font = "700 12px Orbitron, sans-serif";
+      ctx.fillText(label, s.x, s.y - 8);
+    }
+  }

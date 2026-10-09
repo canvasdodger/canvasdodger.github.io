@@ -1,0 +1,13 @@
+function saveShip() {
+  HANGAR.flair = parseInt(($("input[name=flair]:checked") || {}).value || "0", 10) || 0;
+  Store.set(K.shipCustom, HANGAR);
+  closeShipModal();
+  if (G.mode) { startMode(G.mode); } else { goHome(); }
+}
+
+// ================= ship customizer wiring =================
+var bs = $("#btnShipDone");
+if (bs) bs.addEventListener("click", saveShip);
+var bc = $("#btnShipClose");
+if (bc) bc.addEventListener("click", closeShipModal);
+window.addEventListener("keydown", function (e) { if (e.key === "6") openShipModal(); });

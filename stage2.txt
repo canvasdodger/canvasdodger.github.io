@@ -1,0 +1,80 @@
+    // ---- ship shape ----
+    var sh = s.shape || "arrow";
+    var px = s.x, py = s.y, pw = s.w, ph = s.h;
+    ctx.fillStyle = s.color;
+    if (sh === "arrow") {
+      roundRect(px, py, pw, ph, 9);
+      ctx.fillStyle = "rgba(2,10,24,0.85)";
+      ctx.fillRect(px + pw / 2 - 7, py + 5, 14, ph - 10);
+      ctx.fillStyle = "#ffb454";
+      var flick = 6 + Math.random() * 8;
+      ctx.beginPath();
+      ctx.moveTo(px + 10, py + ph);
+      ctx.lineTo(px + 16, py + ph + flick);
+      ctx.lineTo(px + 22, py + ph);
+      ctx.moveTo(px + pw - 22, py + ph);
+      ctx.lineTo(px + pw - 16, py + ph + flick);
+      ctx.lineTo(px + pw - 10, py + ph);
+      ctx.fill();
+    } else if (sh === "dart") {
+      ctx.beginPath();
+      ctx.moveTo(px + pw / 2, py);
+      ctx.lineTo(px + pw - 18, py + ph);
+      ctx.lineTo(px + 18, py + ph);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(2,10,24,0.85)";
+      ctx.fillRect(px + 10, py + ph / 2 - 5, pw - 20, 10);
+      ctx.fillStyle = "#ffb454";
+      ctx.fillRect(px + 14, py + ph - 6, pw - 28, 6);
+    } else if (sh === "wasp") {
+      ctx.beginPath();
+      ctx.moveTo(px + 30, py + 4);
+      ctx.lineTo(px + pw - 38, py + ph - 6);
+      ctx.lineTo(px + pw - 42, py + ph + 4);
+      ctx.lineTo(px + pw / 2, py + ph + 6);
+      ctx.lineTo(px + 42, py + ph + 4);
+      ctx.lineTo(px + 38, py + ph - 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(2,10,24,0.85)";
+      ctx.fillRect(px + 6, py + ph / 2 - 5, pw - 12, 10);
+      ctx.fillStyle = "#ffb454";
+      ctx.fillRect(px + 12, py + ph - 7, pw - 24, 5);
+    } else if (sh === "orb") {
+      ctx.beginPath();
+      ctx.arc(px + pw / 2, py + ph / 2, pw / 2 - 3, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = "rgba(2,10,24,0.85)";
+      ctx.fillRect(px + 8, py + 8, pw - 16, ph - 16);
+      ctx.fillStyle = "#ffb454";
+      ctx.beginPath();
+      ctx.arc(px + pw / 2, py + ph / 2, pw / 2 - 9, 0, TAU);
+      ctx.strokeStyle = "#ffb454";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    } else if (sh === "fang") {
+      ctx.beginPath();
+      ctx.moveTo(px + pw / 2, py);
+      ctx.lineTo(px + pw - 22, py + ph);
+      ctx.lineTo(px + pw - 12, py + ph - 6);
+      ctx.lineTo(px + pw - 20, py + ph - 4);
+      ctx.lineTo(px + 12, py + ph);
+      ctx.lineTo(px + 20, py + ph - 6);
+      ctx.lineTo(px + 10, py + ph - 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "rgba(2,10,24,0.85)";
+      ctx.fillRect(px + 10, py + 8, pw - 20, ph - 16);
+      ctx.fillStyle = "#ffb454";
+      ctx.fillRect(px + 14, py + ph - 7, pw - 28, 5);
+    } else if (sh === "veil") {
+      ctx.beginPath();
+      ctx.arc(px + pw / 2, py + ph / 2, pw / 2 - 3, Math.PI * 0.05, Math.PI * 0.95);
+      ctx.arc(px + pw / 2, py + ph / 2, 5, Math.PI * 0.05, Math.PI * 0.95);
+      ctx.fill();
+      ctx.fillStyle = "rgba(2,10,24,0.85)";
+      ctx.fillRect(px + 6, py + ph / 2 - 4, pw - 12, ph - 8);
+      ctx.fillStyle = "#ffb454";
+      ctx.fillRect(px + 12, py + ph - 7, pw - 24, 5);
+    }

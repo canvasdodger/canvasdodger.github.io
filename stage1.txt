@@ -1,0 +1,21 @@
+  function drawShip(s, label) {
+    var cheatTrail = (s === player) ? cheatDef() : null;
+    for (var i = 0; i < s.trail.length; i++) {
+      var t = s.trail[i];
+      t.t -= 0.016;
+      var a = t.t < 0 ? 0 : t.t;
+      ctx.fillStyle = cheatTrail ? "rgba(" + cheatTrail.trail + "," + (a * 0.5) + ")"
+        : "rgba(0,240,255," + (a * 0.5) + ")";
+      ctx.fillRect(t.x - 3, t.y, 6, 8);
+    }
+    if (s.invuln > 0 && Math.floor(performance.now() / 90) % 2 === 0) return;
+
+    ctx.save();
+    if (G.phaseUpT > 0) ctx.globalAlpha = 0.45;
+    else if (activeCheat === "ella" && s === player && cheatPhaseT % 6 < 4) ctx.globalAlpha = 0.45;
+    if (cheatTrail && s === player) { ctx.shadowColor = cheatTrail.glow; ctx.shadowBlur = 26; }
+    else if (cheatTrail) { ctx.shadowColor = s.color; ctx.shadowBlur = 18; }
+    else { ctx.shadowColor = s.color; ctx.shadowBlur = 18; }
+
+    // ---- ship shape ----
+    var sh = s.shape || "arrow";

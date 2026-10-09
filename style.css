@@ -447,6 +447,86 @@ h1.glitch::after { color: var(--cyan); animation: glitch-b 2.7s infinite steps(1
   top: 34%;
   left: 50%;
   transform: translate(-50%, -50%);
+/* ---------- customizer / hangar (player ship picker) ---------- */
+.paint-chips {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.paint-chip {
+  aspect-ratio: 1;
+  border-radius: 12px;
+  border: 2px solid rgba(255,255,255,0.12);
+  background: var(--cyan);
+  color: #000;
+  font-family: var(--font-display);
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  box-shadow: 0 0 14px rgba(0,240,255,0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.paint-chip:hover { transform: translateY(-2px); border-color: var(--cyan); box-shadow: 0 6px 20px rgba(0,240,255,0.3); }
+.paint-chip.on {
+  border-color: #fff;
+  box-shadow: 0 0 22px currentColor;
+  transform: scale(1.05);
+}
+.shape-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.shape-cell {
+  aspect-ratio: 1;
+  border-radius: 10px;
+  border: 2px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+}
+.shape-cell:hover { border-color: var(--cyan); transform: translateY(-2px); }
+.shape-cell .sd { font-size: 1.3rem; line-height: 1.1; }
+.shape-cell .sn { font-size: 0.55rem; letter-spacing: 0.12em; color: var(--dim); margin-top: 2px; }
+.shape-cell .shp-arrows { display: flex; }
+.shape-cell .shp-arrows span { display: block; width: 8px; height: 8px; border-right: 2px solid var(--text); border-bottom: 2px solid var(--text); transform: rotate(45deg); }
+.shape-cell.on { border-color: #fff; background: rgba(0,240,255,0.18); box-shadow: 0 0 18px rgba(0,240,255,0.25); }
+.shape-cell.on .sn { color: #fff; }
+.opt { font-size: 0.76rem; letter-spacing: 0.06em; color: var(--text); }
+.opt input { accent-color: var(--cyan); }
+.thumb-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 6px 0 14px;
+}
+.thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  border: 2px solid rgba(255,255,255,0.14);
+  background: var(--cyan);
+  color: #000;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+}
+.thumb:hover { transform: translateY(-2px); border-color: var(--cyan); box-shadow: 0 6px 20px rgba(0,240,255,0.3); }
+.thumb.on { border-color: #fff; box-shadow: 0 0 20px currentColor; transform: scale(1.06); }
+.thumb .t-label { font-size: 0.45rem; letter-spacing: 0.14em; color: rgba(255,255,255,0.8); margin-top: 2px; }
+/* hangar slot meta */
+#metaShip { color: var(--amber); }
+
   z-index: 4;
   padding: 14px 34px;
   border: 1px solid var(--cyan);
