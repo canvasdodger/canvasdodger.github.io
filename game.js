@@ -1704,7 +1704,8 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     showOverlay(
       '<h2 class="' + (playerWon ? "win" : "lose") + '">' + head + "</h2>" +
       '<div class="stats"><span>YOU ' + myT + "s</span><span>" + rival + " " + rvT + "s</span></div>" +
-      '<div class="btn-row"><button class="ghost-btn primary" data-act="lobby">LOBBY</button>' +
+      '<div class="btn-row"><button class="ghost-btn primary" data-act="rematch">REMATCH</button>' +
+      '<button class="ghost-btn" data-act="lobby">LOBBY</button>' +
       '<button class="ghost-btn" data-act="home">HOME</button></div>'
     );
     hudStatus.textContent = playerWon ? "VICTORY" : "DEFEAT";
@@ -2792,6 +2793,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
 
   function goLobby() {
     if (!gateMode("MULTIPLAYER", "multiplayer")) return;
+    NetRival.leave();
     stopLoop();
     Sfx.droneStop();
     G.state = "idle";
@@ -2817,6 +2819,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     else if (act === "resume") togglePause(false);
     else if (act === "home") goHome();
     else if (act === "lobby") goLobby();
+    else if (act === "rematch") NetRival.rematch();
     else if (act === "restart" || act === "retry") {
       hideOverlay();
       var mode = G.mode;
@@ -3725,7 +3728,7 @@ var NetRival = {
     if (!CLOUD.on) { this.status("CLOUD OFFLINE — ONLINE UNAVAILABLE."); return; }
     var code = this._code();
     this.status("OPENING ROOM " + code + " …", true);
-    this._rpc("create_room", { p_code: code, p_seed: (Math.random() * 0xffffffff) >>> 0 })
+    this._rpc("create_room", { p_code: code, p_seed: (Math.random() * 2147483647) >>> 0 })
       .then(function (row) {
         if (!row || !row.code) { self.status("COULD NOT OPEN ROOM — TRY AGAIN."); return; }
         var rc = $("#roomCode"); if (rc) rc.value = code;
@@ -3777,6 +3780,13 @@ var NetRival = {
         var row = rows && rows[0];
         if (!row) { self.status("ROOM CLOSED."); self.stopPoll(); return; }
         var host = self.room.side === "host";
+        // rematch: the opponent restarted the match with a fresh seed -> rejoin
+        if ((row.seed >>> 0) !== (self.room.seed >>> 0)) {
+          self.room.seed = row.seed >>> 0;
+          self.room.rival = host ? (row.guest_cs || self.room.rival) : (row.host_cs || self.room.rival);
+          self.beginRace(row.seed >>> 0, self.room.side, self.room.rival);
+          return;
+        }
         if (host && !G.bot) {
           if (row.status === "waiting") { self.status("ROOM " + self.room.code + " OPEN — WAITING FOR RIVAL …"); return; }
           self.room.rival = row.guest_cs || "RIVAL";
@@ -3832,7 +3842,21 @@ var NetRival = {
         body: JSON.stringify({ status: "done", winner: won ? (this.room.myCs || "") : (this.room.rival || "") })
       }).catch(function () {});
     }
-    this.stopPoll();
+    // NOTE: do NOT stopPoll here — keep listening so the opponent's REMATCH
+    // (a changed seed) is detected and both sides drop into the new race.
+  },
+  rematch: function () {
+    var self = this;
+    if (!this.room || !CLOUD.on) { this.status("NO ACTIVE ROOM."); return; }
+    this.status("SETTING UP REMATCH …", true);
+    this._rpc("rematch_room", { p_code: this.room.code })
+      .then(function (row) {
+        if (!row || !row.code) throw new Error("REMATCH FAILED");
+        self.room.seed = row.seed >>> 0;
+        self.room.rival = (self.room.side === "host") ? (row.guest_cs || self.room.rival) : (row.host_cs || self.room.rival);
+        self.beginRace(row.seed >>> 0, self.room.side, self.room.rival);
+      })
+      .catch(function () { self.status("REMATCH FAILED — TRY AGAIN."); });
   },
   leave: function () { this.stopPoll(); this.room = null; }
 };
@@ -3962,6 +3986,16 @@ function deleteCloudRun(id) {
     if (v == null) return;
     var n = parseInt(v, 10);
     if (n >= 0 && n < 100000000) { G.score = n; Sfx.blip(); }
+  });
+  var rcl = $("#btnRoomClose");
+  if (rcl) rcl.addEventListener("click", function () {
+    if (!Auth.superior()) return;
+    var code = String(($("#roomKill") && $("#roomKill").value) || "").trim().toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, "");
+    if (code.length !== 6) { superNote("ENTER A 6-CHAR ROOM CODE."); return; }
+    fetch(CLOUD.url + "/rest/v1/rooms?code=eq." + encodeURIComponent(code), { method: "DELETE", headers: Auth.hdrs() })
+      .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
+      .then(function (n) { superNote((n && n.length) ? "CLOSED ROOM " + code + "." : "NO SUCH ROOM."); })
+      .catch(function () { superNote("CLOSE FAILED — SUPERIOR ONLY."); });
   });
 })();
 (function wireAuthUI() {

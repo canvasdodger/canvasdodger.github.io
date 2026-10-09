@@ -20,7 +20,7 @@ create table if not exists public.rooms (
   guest_x     real not null default 700,
   guest_alive boolean not null default true,
   guest_seen  bigint not null default 0,
-  guest_elapsed real not null default 0,
+  guest_elapsed real not null default 1,
   winner      text,                          -- callsign of winner, set when status='done'
   created_at  bigint not null default (extract(epoch from now()) * 1000)::bigint
 );
@@ -134,6 +134,32 @@ begin
   return row;
 end $$;
 
+-- rematch_room: a fresh seed on the SAME room (no new code). Idempotent, so if
+-- both players tap REMATCH at once the last write simply wins and both sides
+-- detect the changed seed on their next poll and drop into the new race.
+create or replace function public.rematch_room(p_code text)
+returns public.rooms language plpgsql security definer set search_path = public as $$
+declare row public.rooms;
+begin
+  if auth.uid() is null then
+    raise exception 'sign in to rematch' using errcode = 'P0001';
+  end if;
+  update public.rooms r set
+    seed = (floor(random() * 2147483647))::integer,
+    status = 'racing',
+    winner = null,
+    host_x = null, host_alive = null, host_elapsed = null,
+    guest_x = null, guest_alive = null, guest_elapsed = null,
+    host_seen = (extract(epoch from now()) * 1000)::bigint,
+    guest_seen = (extract(epoch from now()) * 1000)::bigint
+  where r.code = p_code
+    and r.status = 'done'
+    and (r.host_id = auth.uid() or r.guest_id = auth.uid())
+  returning r.* into row;
+  return row;
+end $$;
+
 grant execute on function public.create_room(text, integer) to authenticated;
 grant execute on function public.join_room(text) to authenticated;
+grant execute on function public.rematch_room(text) to authenticated;
 
