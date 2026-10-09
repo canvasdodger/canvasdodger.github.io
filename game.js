@@ -725,6 +725,10 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       if (!gateMode("MULTIPLAYER", "multiplayer")) { location.hash = ""; return; }
       stopLoop(); G.state = "idle"; hideOverlay(); bannerEl.hidden = true; showScreen("lobby"); refreshHome();
     }
+    else if (h === "online") {
+      if (!gateMode("ONLINE DUEL", "online")) { location.hash = ""; return; }
+      stopLoop(); G.state = "idle"; hideOverlay(); bannerEl.hidden = true; showScreen("online");
+    }
     else if (h === "null") {
       if (prog.nullUnlocked) { showScreen("game"); startMode("null"); }
       else location.hash = "";
@@ -2718,6 +2722,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       if (k === "1") location.hash = "#/classic";
       if (k === "2") location.hash = "#/endless";
       if (k === "3") location.hash = "#/multiplayer";
+      if (k === "o" || k === "O") location.hash = "#/online";
       if (k === "4" && prog.nullUnlocked) location.hash = "#/null";
       if (k === "5") location.hash = "#/daily";
     }
@@ -2727,6 +2732,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       if (k === "e" || k === "E") startBot("hard");
       if (k === "r" || k === "R") startBot("elite");
       if (k === "t" || k === "T") startBot("hell");
+      if (k === "o" || k === "O") location.hash = "#/online";
     }
   });
 
@@ -2900,6 +2906,13 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   $("#btnRoom").addEventListener("click", function () { NetRival.create(); });
   var rj = $("#btnRoomJoin");
   if (rj) rj.addEventListener("click", function () { NetRival.join(); });
+  var onlineBack = $("#btnOnlineBack");
+  if (onlineBack) onlineBack.addEventListener("click", function () {
+    NetRival.leave();
+    Sfx.blip();
+    location.hash = "#/multiplayer";
+  });
+
 
   var howto = $("#howto");
   $("#btnHowto").addEventListener("click", function () { howto.hidden = false; });

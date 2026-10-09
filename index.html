@@ -84,6 +84,14 @@
         <span class="launch">LOBBY <kbd>3</kbd></span>
       </article>
 
+      <article class="mode-card" tabindex="0" data-goto="online">
+        <div class="card-icon">&#9877;</div>
+        <h2>VS PLAYERS — ONLINE</h2>
+        <p>Room-code races against real players. Shared storms, ghost rivals, no host advantage.</p>
+        <div class="card-meta"><span id="metaOnline">ONLINE DUEL</span></div>
+        <span class="launch">ENTER <kbd>O</kbd></span>
+      </article>
+
       <article class="mode-card secret" id="cardNull" tabindex="0" data-goto="null" hidden>
         <div class="card-icon glitch-mini" data-text="&#8981;">&#8981;</div>
         <h2>S06 — NULL PROTOCOL</h2>
@@ -213,25 +221,61 @@
         <div class="card-meta"><span data-botwins="hell">0 WINS</span></div>
         <span class="launch">CHALLENGE <kbd>T</kbd></span>
       </article>
-      <article class="mode-card locked" id="cardOnline">
+      <article class="mode-card" tabindex="0" data-goto="online">
         <div class="card-icon">&#9877;</div>
         <h2>VS PLAYERS — ONLINE</h2>
-        <p>Room-code races against real players.</p>
-        <div class="room-row">
-          <input id="roomCode" type="text" maxlength="6" placeholder="ROOM CODE" />
-          <button class="ghost-btn" id="btnRoom">CREATE</button>
-          <button class="ghost-btn" id="btnRoomJoin">JOIN</button>
-        </div>
-        <span class="launch" id="roomStatus">Create a room or enter a 6-code to race.</span>
-        <div class="room-presence" id="roomPresence" hidden>
-          <span class="seat" id="seatHost">HOST · —</span>
-          <span class="seat vs">VS</span>
-          <span class="seat" id="seatGuest">WAITING…</span>
-        </div>
+        <p>Room-code races against real players. Open the online lobby to CREATE or JOIN a match.</p>
+        <div class="card-meta"><span>ONLINE DUEL</span></div>
+        <span class="launch">ONLINE LOBBY <kbd>O</kbd></span>
       </article>
     </main>
 
     <div class="home-foot"><p>Online is live — CREATE a room or JOIN a 6-code to race. Bots still here for solo practice.</p></div>
+  </div>
+
+  <!-- ================= ONLINE LOBBY ================= -->
+  <div id="screen-online" class="screen">
+    <div class="grid-bg" aria-hidden="true"></div>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <header class="hero compact">
+      <div class="sys-actions">
+        <button class="icon-btn btn-mute" aria-label="Toggle sound">&#9834;</button>
+        <button class="icon-btn btn-full" aria-label="Fullscreen">&#x26F6;</button>
+        <button class="icon-btn" id="btnOnlineBack" aria-label="Back">&#8617;</button>
+      </div>
+      <div class="eyebrow">ONLINE // ROOM RACES</div>
+      <h1 class="small">VS PLAYERS</h1>
+      <p class="tagline">CREATE a room, share the code, outlast your rival.</p>
+    </header>
+
+    <main class="online-panel">
+      <div class="online-box">
+        <h3>ROOM MATCH</h3>
+        <div class="room-row big">
+          <input id="roomCode" type="text" maxlength="6" placeholder="ROOM CODE" autocomplete="off" spellcheck="false" />
+          <button class="ghost-btn primary" id="btnRoom">CREATE</button>
+          <button class="ghost-btn" id="btnRoomJoin">JOIN</button>
+        </div>
+        <span class="launch" id="roomStatus">Create a room or enter a 6-code to race.</span>
+        <div class="room-presence big" id="roomPresence" hidden>
+          <span class="seat" id="seatHost">HOST · —</span>
+          <span class="seat vs">VS</span>
+          <span class="seat" id="seatGuest">WAITING…</span>
+        </div>
+      </div>
+
+      <div class="online-how">
+        <h4>HOW IT WORKS</h4>
+        <ol>
+          <li><b>CREATE</b> — opens a room and shows your 6-character code.</li>
+          <li><b>SHARE</b> — send the code to your rival.</li>
+          <li><b>JOIN</b> — they type the code and enter. Both fly the same storm.</li>
+          <li><b>SURVIVE</b> — last ship alive takes the round. REMATCH for a new seed.</li>
+        </ol>
+        <p class="hint">Bots in the lobby are still there for solo practice.</p>
+      </div>
+    </main>
   </div>
 
   <!-- ================= GAME ARENA ================= -->
