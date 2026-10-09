@@ -3803,8 +3803,11 @@ var NetRival = {
         var row = rows && rows[0];
         if (!row) { self.status("ROOM CLOSED."); self.stopPoll(); return; }
         var host = self.room.side === "host";
-        // rematch: the opponent restarted the match with a fresh seed -> rejoin
-        if ((row.seed >>> 0) !== (self.room.seed >>> 0)) {
+        // rematch: only meaningful DURING a live race — the opponent restarted
+        // with a fresh seed. Guard on G.bot.net so a fresh CREATE/JOIN never
+        // auto-launches on top of the waiting/lobby screen.
+        var inRace = G.bot && G.bot.net && G.state === "playing";
+        if (inRace && (row.seed >>> 0) !== (self.room.seed >>> 0)) {
           self.room.seed = row.seed >>> 0;
           self.room.rival = host ? (row.guest_cs || self.room.rival) : (row.host_cs || self.room.rival);
           self.beginRace(row.seed >>> 0, self.room.side, self.room.rival);
