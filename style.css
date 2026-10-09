@@ -800,6 +800,10 @@ h1.small { margin: 8px 0 4px; font-family: var(--font-display); font-size: clamp
 .lb-empty { text-align: center; color: var(--dim); font-size: 0.8rem; padding: 18px 0; letter-spacing: 0.1em; }
 .lb-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
 .lb-foot #lbSource { font-size: 0.66rem; color: var(--dim); letter-spacing: 0.1em; }
+/* superior console row: 5 controls — must wrap instead of clipping HIDDEN WORDS */
+#superBox { flex-wrap: wrap; justify-content: flex-start; gap: 8px; }
+#superBox .ghost-btn.tiny { flex: 0 0 auto; white-space: nowrap; }
+#superBox #roleCallsign { flex: 1 1 110px; min-width: 90px; }
 @media (max-width: 520px) {
   .lb-row { grid-template-columns: 26px 1fr auto; grid-template-areas: "pos name score" "pos title score" "pos detail detail"; }
   .lb-detail { justify-self: start; }
