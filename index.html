@@ -125,6 +125,15 @@
           </label>
           <span class="hint">stored on this device only</span>
         </div>
+        <div class="passport">
+          <label for="passportBox">PILOT PASSPORT — carry this pilot to another device</label>
+          <textarea class="text" id="passportBox" rows="3" spellcheck="false" placeholder="Export fills this code. Paste a code here to import."></textarea>
+          <div class="passport-actions">
+            <button class="ghost-btn" id="btnPassExport" type="button">EXPORT</button>
+            <button class="ghost-btn" id="btnPassImport" type="button">IMPORT</button>
+          </div>
+          <span class="hint" id="passportStatus">Codes are plain text — no account, no server.</span>
+        </div>
         <div class="bar-actions">
           <button class="ghost-btn" id="btnPilotPanelClose">CANCEL</button>
           <button class="ghost-btn primary" id="btnPilotPanelSave">SAVE</button>

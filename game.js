@@ -3014,6 +3014,180 @@ function closeBoard() { $("#modalBoard").hidden = true; }
 })();
 
 
+// ================= pilot passport (Phase 5: local-first account seam) =================
+// Portable identity: export your pilot + progress as one code, import it on
+// another device. No server needed — fully static. Passport.remote is the
+// seam a cloud backend (Firebase anon auth, etc.) plugs into later:
+//   { push: function(payload) {}, pull: function() -> payload|null }
+K.passport = "dodger_passport_v1";
+var Passport = {
+  VERSION: 1,
+  remote: null,
+  // ---- collect everything portable (avatar stays device-local: photo is
+  // deliberately excluded so codes stay short enough to paste) ----
+  dump: function () {
+    var per = getBotWins().per;
+    return {
+      v: this.VERSION,
+      at: Date.now(),
+      pilot: { name: pilot.name, title: pilot.title },
+      prog: {
+        unlocked: prog.unlocked,
+        ranks: Object.assign({}, prog.ranks),
+        nullUnlocked: !!prog.nullUnlocked
+      },
+      ship: { shape: HANGAR.shape, paint: HANGAR.paint, trail: HANGAR.trail, flair: HANGAR.flair },
+      bests: { endless: Store.get(K.bestEndless, 0), null: Store.get(K.bestNull, 0) },
+      botWins: per,
+      tutorial: !!Store.get(K.tutorial, {}).done,
+      lb: LB._all()
+    };
+  },
+  encode: function (payload) {
+    var json = JSON.stringify(payload);
+    var b64 = btoa(unescape(encodeURIComponent(json)));
+    return "DODGER1." + b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  },
+  exportCode: function () { return this.encode(this.dump()); },
+  // ---- decode + validate; returns payload or null ----
+  decode: function (code) {
+    if (typeof code !== "string") return null;
+    var s = code.trim().replace(/\s+/g, "");
+    if (s.slice(0, 8) !== "DODGER1.") return null;
+    s = s.slice(8).replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    try {
+      var json = decodeURIComponent(escape(atob(s)));
+      var p = JSON.parse(json);
+      if (!p || typeof p !== "object" || p.v !== this.VERSION) return null;
+      if (!p.pilot || typeof p.pilot !== "object") return null;
+      return p;
+    } catch (e) { return null; }
+  },
+  // ---- merge imported payload into local state (best-of wins, identity taken) ----
+  merge: function (p) {
+    var summary = { ranks: 0, sectors: 0, scores: 0, botWins: 0, scoresLB: 0 };
+    // identity: callsign/title come from the passport; local avatar kept
+    pilot.name = String(p.pilot.name || "LUMEN").replace(/[^A-Za-z0-9 _-]/g, "").slice(0, 14) || "LUMEN";
+    pilot.title = String(p.pilot.title || "PIONEER").slice(0, 14);
+    // campaign: max unlocked, better rank per sector
+    if (p.prog && typeof p.prog === "object") {
+      var inc = p.prog.unlocked | 0;
+      if (inc > prog.unlocked) { prog.unlocked = inc; summary.sectors++; }
+      if (p.prog.nullUnlocked && !prog.nullUnlocked) { prog.nullUnlocked = true; summary.sectors++; }
+      var ranks = p.prog.ranks || {};
+      for (var id in ranks) {
+        if (!Object.prototype.hasOwnProperty.call(ranks, id)) continue;
+        var r = ranks[id];
+        if ((r === "S" || r === "A" || r === "B" || r === "C") && (!prog.ranks[id] || rankBetter(r, prog.ranks[id]))) {
+          prog.ranks[id] = r; summary.ranks++;
+        }
+      }
+    }
+    // bests: max
+    if (p.bests) {
+      [K.bestEndless, K.bestNull].forEach(function (key, i) {
+        var inc2 = (p.bests[i === 0 ? "endless" : "null"]) | 0;
+        var loc = Store.get(key, 0) | 0;
+        if (inc2 > loc) { Store.set(key, inc2); summary.scores++; }
+      });
+    }
+    // bot wins: per-bot max
+    if (p.botWins && typeof p.botWins === "object") {
+      BOT_IDS.forEach(function (b) {
+        var inc3 = p.botWins[b] | 0;
+        var key = botWinsKey(b);
+        var loc2 = Store.get(key, 0) | 0;
+        if (inc3 > loc2) { Store.set(key, inc3); summary.botWins++; }
+      });
+    }
+    // tutorial: OR
+    if (p.tutorial && !Store.get(K.tutorial, {}).done) Store.set(K.tutorial, { done: true, at: Date.now() });
+    // ship: passport wins (it is the pilot's loadout)
+    if (p.ship && p.ship.shape) {
+      // shapeLabel/paintById return fallbacks, so validate against the raw tables
+      var shapeOk = SHIP_SHAPES.some(function (sh) { return sh.id === p.ship.shape; });
+      var paintOk = PAINTS.some(function (pt) { return pt.id === p.ship.paint; });
+      if (shapeOk) {
+        HANGAR.shape = p.ship.shape;
+        if (paintOk) HANGAR.paint = p.ship.paint;
+        if (p.ship.trail) HANGAR.trail = p.ship.trail;
+        HANGAR.flair = p.ship.flair | 0;
+        Store.set(K.shipCustom, HANGAR);
+      }
+    }
+    // leaderboard: merge, dedupe, cap
+    if (Array.isArray(p.lb)) {
+      var seen = {}, before = LB._all().length;
+      var merged = LB._all().concat(p.lb.filter(function (r) {
+        if (!r || typeof r !== "object") return false;
+        var k = [r.mode, r.score, r.at, r.name].join("|");
+        if (seen[k]) return false;
+        seen[k] = 1; return true;
+      }));
+      merged.sort(function (a, b) { return (b.score | 0) - (a.score | 0) || (a.at | 0) - (b.at | 0); });
+      if (merged.length > LB.LIMIT) merged = merged.slice(0, LB.LIMIT);
+      LB._save(merged);
+      summary.scoresLB = Math.max(0, merged.length - before);
+    }
+    saveProgress();
+    savePilot();
+    return summary;
+  },
+  importCode: function (code) {
+    var p = this.decode(code);
+    if (!p) return { ok: false, error: "BAD CODE — COPY THE WHOLE THING." };
+    var s = this.merge(p);
+    refreshHome();
+    renderPilot();
+    if (typeof renderBoard === "function" && $("#modalBoard") && !$("#modalBoard").hidden) renderBoard();
+    return { ok: true, summary: s };
+  }
+};
+
+var PASSPORT_LIMIT = 6000; // chars — warn if the code gets unwieldy
+function passportExport() {
+  var code = Passport.exportCode();
+  var box = $("#passportBox");
+  var status = $("#passportStatus");
+  if (box) { box.value = code; box.focus(); box.select(); }
+  if (status) status.textContent = code.length > PASSPORT_LIMIT
+    ? "CODE READY (" + code.length + " CHARS — SLOW TO PASTE)"
+    : "CODE READY (" + code.length + " CHARS) — COPY IT.";
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code);
+  } catch (e) {}
+  Sfx.win();
+  return code;
+}
+function passportImport() {
+  var box = $("#passportBox");
+  var status = $("#passportStatus");
+  var res = Passport.importCode(box ? box.value : "");
+  if (!res.ok) {
+    if (status) status.textContent = res.error;
+    Sfx.lose();
+    return res;
+  }
+  var s = res.summary;
+  var bits = [];
+  if (s.sectors) bits.push(s.sectors + " SECTOR" + (s.sectors === 1 ? "" : "S"));
+  if (s.ranks) bits.push(s.ranks + " RANK" + (s.ranks === 1 ? "" : "S"));
+  if (s.scores) bits.push(s.scores + " BEST" + (s.scores === 1 ? "" : "S"));
+  if (s.botWins) bits.push(s.botWins + " BOT WINS");
+  if (s.scoresLB) bits.push(s.scoresLB + " BOARD ENTRIES");
+  if (status) status.textContent = "PASSPORT MERGED: " + (bits.length ? bits.join(" + ") : "NOTHING NEW — YOU WERE AHEAD.");
+  if (box) box.value = "";
+  Sfx.win();
+  return res;
+}
+
+(function wirePassport() {
+  var ex = $("#btnPassExport"); if (ex) ex.addEventListener("click", passportExport);
+  var im = $("#btnPassImport"); if (im) im.addEventListener("click", passportImport);
+})();
+
+
   route();
   window.addEventListener("load", fitCanvas);
   // ================= tutorial coach / buttons =================
