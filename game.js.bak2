@@ -385,7 +385,7 @@
         if (def.bonusLife && G.state === "playing" && !cheatLifeGiven) {
           cheatLifeGiven = true;
           G.lives = Math.min(5, G.lives + 1);
-          Sfx.revive();
+          Sfx.lifeGift();
         }
       } else {
         // aura off: restore the ship's natural color for this mode/sector
@@ -881,7 +881,7 @@
   function tutStep() { return TUT_STEPS[TUT.idx] ? TUT_STEPS[TUT.idx].id : "done"; }
   function tutAdvance() {
     if (!TUT.active) return;
-    Sfx.click();
+    Sfx.blip();
     if (player) burst(player.x + player.w / 2, player.y, "#5dff9a", 14);
     TUT.idx++;
     if (TUT.idx >= TUT_STEPS.length) { tutGraduate(); return; }
@@ -952,7 +952,7 @@
     bannerEl.textContent = text;
     bannerEl.hidden = false;
     G.bannerT = seconds || 1.6;
-    Sfx.click();
+    Sfx.banner();
   }
 
   function briefing() {
@@ -986,7 +986,7 @@
     G.elapsed = 0;
     lastT = performance.now();
     hudStatus.textContent = "LIVE";
-    Sfx.click();
+    Sfx.blip();
     if (G.mode === "endless") showBanner(PHASES[0].name, 1.4);
     if (G.mode === "multiplayer") showBanner("RACE — LAST ALIVE WINS", 1.6);
     if (G.mode === "null") showBanner("NULL PROTOCOL", 1.6);
@@ -1259,7 +1259,7 @@
     if (kind === "shield") G.shield = Math.max(G.shield, 1);
     else if (kind === "slow") G.slowT = spec.dur;
     else if (kind === "magnet") G.magnetT = spec.dur;
-    else if (kind === "phase") { G.phaseUpT = spec.dur; Sfx.phaseUp(); }
+    else if (kind === "phase") { G.phaseUpT = spec.dur; Sfx.phaseSfx(); }
     else if (kind === "blast") {
       for (var i = 0; i < obstacles.length; i++) {
         burst(obstacles[i].x + obstacles[i].w / 2, obstacles[i].y + obstacles[i].h / 2, "#ff9a5d", 6);
@@ -1268,7 +1268,7 @@
       // keep seekers from a blast-fracture; clear everything else
       obstacles = obstacles.filter(function (o) { return o.seeker && o.homeT > 0; });
       G.shake = 10;
-      Sfx.phaseUp();
+      Sfx.phaseSfx();
     }
     else if (kind === "x2") G.x2T = spec.dur;
     else if (kind === "overdrive") { G.overT = spec.dur; G.magnetT = Math.max(G.magnetT, spec.dur); G.x2T = Math.max(G.x2T, spec.dur); }
@@ -1288,7 +1288,7 @@
       G.shake = Math.max(G.shake, 8);
       burst(player.x + player.w / 2, player.y + player.h / 2, "#5dff9a", 10);
       addPopup(player.x + player.w / 2, player.y - 6, "OOPS — KEEP DODGING!", "#5dff9a");
-      Sfx.click();
+      Sfx.blip();
       return;
     }
     if (G.shield > 0) {
@@ -1296,7 +1296,7 @@
       player.invuln = 1.1;
       addPopup(player.x + player.w / 2, player.y - 6, "SHIELD!", "#5dff9a");
       burst(player.x + player.w / 2, player.y + player.h / 2, "#5dff9a", 14);
-      Sfx.click();
+      Sfx.blip();
       return;
     }
     G.lives--;
@@ -1312,7 +1312,7 @@
         G.lives = 1;
         player.invuln = 2.4;
         addPopup(player.x + player.w / 2, player.y - 6, "REVIVED", "#ffffff");
-        Sfx.phaseUp();
+        Sfx.phaseSfx();
         return;
       }
       loseRun();
@@ -1344,7 +1344,7 @@
     burst(cx, cy, cheat.glow, 26);
     G.shake = Math.max(G.shake, 10);
     G.score += kills * 50 * scoreMult();
-    Sfx.cheer();
+    Sfx.shock();
     if (kills > 0) {
       addPopup(cx, cy - 30, "SHOCKWAVE x" + kills, cheat.color);
     }
@@ -1640,7 +1640,7 @@
         var dodgeNow = (cheatPhaseT % 6 < 4);
         if (dodgeNow !== cheatPhaseWasDodge) {
           cheatPhaseWasDodge = dodgeNow;
-          Sfx.phaseUp();
+          Sfx.phaseShift();
         }
       }
       if (cheat.magnet) G.magnetT = Math.max(G.magnetT, 0.2);
@@ -1769,7 +1769,7 @@
               player.invuln = Math.max(player.invuln, 0.9);
               burst(player.x + player.w / 2, player.y, paletteNow().accent, 16);
               addPopup(player.x + player.w / 2, player.y - 10, "RIFT!", paletteNow().accent);
-              Sfx.phaseUp();
+              Sfx.phaseSfx();
               obstacles.splice(i, 1);
               continue;
             }
@@ -1814,7 +1814,7 @@
           addPopup(player.x + player.w / 2, player.y - 10, "GRAZE +" + bonus, "#7ce7ff");
           Sfx.graze();
           if (activeCheat && CHEAT_STING[activeCheat]) {
-            Sfx.comboSting(G.combo, CHEAT_STING[activeCheat].base);
+            Sfx.comboSting(comboTier(G.combo), CHEAT_STING[activeCheat].base);
           }
         }
       }
@@ -2482,7 +2482,7 @@
     function go() {
       var to = card.getAttribute("data-goto");
       Sfx.ensure();
-      Sfx.click();
+      Sfx.blip();
       location.hash = to === "null" ? "#/null" : "#/" + to;
     }
     card.addEventListener("click", go);
@@ -2516,7 +2516,7 @@
     var code = "";
     for (var i = 0; i < 6; i++) code += chars[(Math.random() * chars.length) | 0];
     $("#roomCode").value = code;
-    Sfx.click();
+    Sfx.blip();
     setTimeout(function () { $("#roomCode").value = ""; }, 2600);
   });
 
@@ -2544,5 +2544,3 @@
     else if (act === "tut-home") { tutSkip(); goHome(); }
   });
 })();
-
-
