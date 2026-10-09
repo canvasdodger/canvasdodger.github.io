@@ -27,9 +27,9 @@
         <button class="icon-btn btn-mute" aria-label="Toggle sound" title="Toggle sound (M)">&#9834;</button>
         <button class="icon-btn btn-full" aria-label="Toggle fullscreen" title="Fullscreen (F)">&#x26F6;</button>
       </div>
-      <div class="eyebrow"></div>
+      <div class="eyebrow">NEON PROTOCOL // SYSTEMS READY</div>
       <h1 class="glitch" data-text="CANVAS // DODGER">CANVAS // DODGER</h1>
-      <p class="tagline"></p>
+      <p class="tagline">Select protocol to engage</p>
     </header>
 
     <main class="mode-grid">
@@ -76,7 +76,7 @@
 
     <div class="home-foot">
       <button class="ghost-btn" id="btnHowto">HOW TO PLAY</button>
-      <button class="ghost-btn" id="btnInstall" hidden>&#128187; INSTALL APP</button>
+      <p>Built with HTML, CSS &amp; JavaScript · no assets · 60fps</p>
     </div>
   </div>
 
@@ -195,8 +195,17 @@
         <li><b>Endless:</b> 1 life, phases every 30s, drops get stronger the longer you last.</li>
         <li><b>Multiplayer:</b> race a bot — Easy / Normal / Hard / Elite / Hell (final boss). Both share the same hazard seed, last alive wins.</li>
       </ul>
-      <h3>⚡ RUMOR</h3>
-      <p>Cheat codes exist in this game. You'll discover them by exploring. No spoilers here — that's the point.</p>
+      <h3>⚡ AURA CHEAT CODES</h3>
+      <ul>
+        <li><b>How:</b> on desktop, just <b>type the word</b> anywhere outside the lobby (no Enter needed). Retype it to switch the aura off; type another word to swap. One aura at a time — runs still save normally.</li>
+        <li><b>On phone:</b> tap the <b>⚡ button</b> in the arena HUD to open the aura pad, then tap a code. Same toggle rule applies.</li>
+        <li><b class="cheat-name" style="color:#ffd75d">thunderfist</b> — INVINCIBLE storm brawler: ram through hazards + lightning shockwave every 6s.</li>
+        <li><b class="cheat-name" style="color:#7cf7ff">kiphnic</b> — INVINCIBLE void-god: permanent magnet + 2&times; score.</li>
+        <li><b class="cheat-name" style="color:#ff9a3c">kwoffie</b> — INVINCIBLE solar creator: 3&times; score, shard vacuum, +1 life (once per run).</li>
+        <li><b class="cheat-name" style="color:#5dff9a">zee</b> — speedster: +45% ship speed, 1.25&times; score. Fast but mortal.</li>
+        <li><b class="cheat-name" style="color:#5dd7ff">naya</b> — guardian: shield regenerates every 8s. Tanky but killable.</li>
+        <li><b class="cheat-name" style="color:#c99aff">ella</b> — phantom: phases 4s pass-through / 2s solid. Evasive, timing-based.</li>
+      </ul>
       <button class="ghost-btn" id="btnHowtoClose">CLOSE</button>
     </div>
   </div>
