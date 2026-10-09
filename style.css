@@ -224,6 +224,42 @@ h1.glitch::after { color: var(--cyan); animation: glitch-b 2.7s infinite steps(1
 .mode-card.secret h2 { color: #ffd7f4; }
 
 .room-row { display: flex; gap: 8px; margin-top: 12px; }
+
+.room-presence {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+.room-presence .seat {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--cyan);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+.room-presence .seat.vs {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  color: var(--amber);
+  letter-spacing: 0.2em;
+}
+.room-presence .seat.full {
+  border-color: rgba(124, 246, 255, 0.55);
+  box-shadow: 0 0 10px rgba(124, 246, 255, 0.18) inset;
+}
+
 .room-row input {
   flex: 1;
   min-width: 0;

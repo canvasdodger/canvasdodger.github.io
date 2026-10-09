@@ -3721,6 +3721,27 @@ var NetRival = {
       if (a) a.disabled = busy; if (b) b.disabled = busy;
     }
   },
+  renderPresence: function (hostCs, guestCs) {
+    var box = $("#roomPresence");
+    if (!box) return;
+    box.hidden = false;
+    var me = String(Auth.callsign() || "").toLowerCase();
+    var h = String(hostCs || "");
+    var g = String(guestCs || "");
+    var hs = $("#seatHost"), gs = $("#seatGuest");
+    if (hs) {
+      hs.textContent = h ? h.slice(0, 14).toUpperCase() + (h.toLowerCase() === me ? " (YOU)" : "") : "WAITING…";
+      hs.classList.toggle("full", !!h);
+    }
+    if (gs) {
+      gs.textContent = g ? g.slice(0, 14).toUpperCase() + (g.toLowerCase() === me ? " (YOU)" : "") : "WAITING…";
+      gs.classList.toggle("full", !!g);
+    }
+  },
+  hidePresence: function () {
+    var box = $("#roomPresence");
+    if (box) box.hidden = true;
+  },
 
   create: function () {
     var self = this;
@@ -3734,6 +3755,7 @@ var NetRival = {
         var rc = $("#roomCode"); if (rc) rc.value = code;
         self.room = { code: code, seed: row.seed, side: "host", rival: "", myCs: Auth.callsign() || "HOST" };
         self.status("ROOM " + code + " OPEN — WAITING FOR RIVAL …", false);
+        self.renderPresence(self.room.myCs, "");
         self.startPoll();
       })
       .catch(function (e) { self.status("CREATE FAILED — " + String((e && e.message) || e).toUpperCase()); });
@@ -3751,6 +3773,7 @@ var NetRival = {
       .then(function (row) {
         if (!row || !row.code) throw new Error("NOT FOUND");
         self.room = { code: code, seed: row.seed, side: "guest", rival: row.host_cs || "RIVAL", myCs: Auth.callsign() || "GUEST" };
+        self.renderPresence(row.host_cs, self.room.myCs);
         return self._rest("rooms?code=eq." + encodeURIComponent(code), {
           method: "PATCH", body: JSON.stringify({ status: "racing" })
         }).then(function () {
@@ -3788,7 +3811,12 @@ var NetRival = {
           return;
         }
         if (host && !G.bot) {
-          if (row.status === "waiting") { self.status("ROOM " + self.room.code + " OPEN — WAITING FOR RIVAL …"); return; }
+          if (!row.guest_cs) {
+            self.status("ROOM " + self.room.code + " OPEN — WAITING FOR RIVAL …");
+            self.renderPresence(row.host_cs, "");
+            return;
+          }
+          self.status("RIVAL JOINED — GO!");
           self.room.rival = row.guest_cs || "RIVAL";
           self._rest("rooms?code=eq." + code, { method: "PATCH", body: JSON.stringify({ status: "racing" }) }).catch(function () {});
           self.beginRace(row.seed, "host", self.room.rival);
@@ -3829,6 +3857,7 @@ var NetRival = {
   },
 
   beginRace: function (seed, side, rival) {
+    this.hidePresence();
     this.startPoll();
     Sfx.blip();
     startMode("multiplayer", { seed: seed >>> 0, net: true, rival: rival || "RIVAL", side: side });
@@ -3858,7 +3887,7 @@ var NetRival = {
       })
       .catch(function () { self.status("REMATCH FAILED — TRY AGAIN."); });
   },
-  leave: function () { this.stopPoll(); this.room = null; }
+  leave: function () { this.stopPoll(); this.room = null; this.hidePresence(); }
 };
 
 Passport.remote = {
