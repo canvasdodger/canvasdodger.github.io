@@ -129,6 +129,7 @@
       // UI click: same as blip (alias kept for customizer/pilot handlers)
       Sfx.blip();
     },
+    hover: function () { this.tone(1180, 0.04, "sine", 0.012); },
     // signature fanfare per cheat aura id (null = power-down)
     cheat: function (id) {
       var J = CHEAT_JINGLES[id];
@@ -1839,6 +1840,9 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
         if (G.phaseIdx < PHASES.length - 1) {
           G.phaseIdx++;
           showBanner(PHASES[G.phaseIdx].name, 1.6);
+          Sfx.phaseSfx();
+          Sfx.droneDuck(true);
+          setTimeout(function () { if (G.state === "playing") Sfx.droneDuck(false); }, 400);
         }
       }
     }
@@ -2768,6 +2772,13 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     }
     card.addEventListener("click", go);
     card.addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+    var lastHover = 0;
+    card.addEventListener("pointerenter", function () {
+      var now = performance.now();
+      if (now - lastHover < 180) return;
+      lastHover = now;
+      Sfx.hover();
+    });
   });
   $$(".mode-card[data-bot]").forEach(function (card) {
     function go() {
