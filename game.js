@@ -2995,8 +2995,19 @@ var LB = {
   top: function (mode, n) {
     n = n || 10;
     var rows = this._all().filter(function (r) { return !mode || r.mode === mode; });
+    var cloud = (this._cloud && mode) ? this._cloud[mode] : null;
+    if (cloud && cloud.length) rows = rows.concat(cloud);
     rows.sort(function (a, b) { return b.score - a.score || a.at - b.at; });
-    return rows.slice(0, n);
+    var seen = {}, out = [];
+    for (var i = 0; i < rows.length; i++) {
+      var rr = rows[i];
+      var key = rr.mode + "|" + rr.name + "|" + rr.score + "|" + rr.at;
+      if (seen[key]) continue;
+      seen[key] = 1;
+      out.push(rr);
+      if (out.length >= n) break;
+    }
+    return out;
   },
   clear: function () { this._save([]); }
 };
@@ -3045,10 +3056,13 @@ function renderBoard() {
     b.classList.toggle("on", b.dataset.mode === lbMode);
   });
   var src = $("#lbSource");
-  if (src) src.textContent = LB.remote ? "SOURCE: CLOUD" : "SOURCE: THIS DEVICE";
+  if (src) src.textContent = !CLOUD.on ? "SOURCE: THIS DEVICE"
+    : (LB.cloudOK === true ? "SOURCE: CLOUD + DEVICE"
+    : (LB.cloudOK === false ? "SOURCE: THIS DEVICE (CLOUD OFFLINE)" : "SOURCE: THIS DEVICE"));
 }
 function openBoard() {
   renderBoard();
+  refreshCloudBoard();
   $("#modalBoard").hidden = false;
 }
 function closeBoard() { $("#modalBoard").hidden = true; }
@@ -3255,6 +3269,115 @@ function passportImport() {
   var im = $("#btnPassImport"); if (im) im.addEventListener("click", passportImport);
 })();
 
+
+
+// ================= cloud (Supabase) =================
+// The anon key is a PUBLIC credential (safe in client code); abuse is limited
+// by the RLS policies in supabase_schema.sql (no deletes, bounded columns).
+// CLOUD.on=false or any network failure falls back to the local backend.
+var CLOUD = {
+  url: "https://rfefjcdxlfcodhwflwrs.supabase.co",
+  anon: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmZWZqY2R4bGZjb2Rod2Zsd3JzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1NDY5OTEsImV4cCI6MjEwNzEyMjk5MX0.ZSH-tpOGLF_bjP75Fi-konKwyH40ni2zEJ1i496E5Sk",
+  on: true,
+  hdrs: function (extra) {
+    var h = { "Content-Type": "application/json", "apikey": this.anon, "Authorization": "Bearer " + this.anon };
+    if (extra) for (var k in extra) h[k] = extra[k];
+    return h;
+  }
+};
+
+LB.remote = {
+  submit: function (row) {   // fire-and-forget: local save already happened
+    if (!CLOUD.on || !row) return;
+    try {
+      fetch(CLOUD.url + "/rest/v1/runs", {
+        method: "POST",
+        headers: CLOUD.hdrs({ "Prefer": "return=minimal" }),
+        body: JSON.stringify([{
+          mode: row.mode, name: row.name, title: row.title, score: row.score,
+          time: row.time, rank: row.rank, won: !!row.won, date: row.date || "", at: row.at | 0
+        }])
+      }).then(function (r) { if (!r.ok) throw new Error("http " + r.status); }).catch(function () {});
+    } catch (e) {}
+  },
+  top: function (mode, n) {   // async: resolves rows, rejects -> caller keeps local
+    if (!CLOUD.on) return Promise.reject(new Error("cloud off"));
+    var q = "select=mode,name,title,score,time,rank,won,date,at&order=score.desc,at.asc&limit=" + (n || 10);
+    if (mode) q += "&mode=eq." + encodeURIComponent(mode);
+    return fetch(CLOUD.url + "/rest/v1/runs?" + q, { headers: CLOUD.hdrs() }).then(function (r) {
+      if (!r.ok) throw new Error("http " + r.status);
+      return r.json();
+    }).then(function (rows) { return Array.isArray(rows) ? rows : []; });
+  }
+};
+
+LB._cloud = {};
+LB.cloudOK = null;   // null = not tried yet, true = fresh, false = failed/off
+function refreshCloudBoard() {
+  if (!LB.remote || !CLOUD.on) { LB.cloudOK = false; return; }
+  LB.remote.top(lbMode, 10).then(function (rows) {
+    LB._cloud[lbMode] = rows;
+    LB.cloudOK = true;
+    renderBoard();
+  }).catch(function () { LB.cloudOK = false; renderBoard(); });
+}
+
+Passport.remote = {
+  push: function (payload) {
+    if (!CLOUD.on || !payload) return Promise.reject(new Error("cloud off"));
+    var cs = String((payload.pilot && payload.pilot.name) || (pilot && pilot.name) || "").replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 14);
+    if (!cs) return Promise.reject(new Error("no callsign"));
+    return fetch(CLOUD.url + "/rest/v1/passports?on_conflict=callsign", {
+      method: "POST",
+      headers: CLOUD.hdrs({ "Prefer": "resolution=merge-duplicates" }),
+      body: JSON.stringify([{ callsign: cs, payload: payload, updated_at: Date.now() }])
+    }).then(function (r) { if (!r.ok) throw new Error("http " + r.status); return true; });
+  },
+  pull: function (cs) {
+    if (!CLOUD.on) return Promise.reject(new Error("cloud off"));
+    cs = String(cs || (pilot && pilot.name) || "").replace(/[^A-Za-z0-9 _-]/g, "").trim().slice(0, 14);
+    if (!cs) return Promise.reject(new Error("no callsign"));
+    return fetch(CLOUD.url + "/rest/v1/passports?callsign=eq." + encodeURIComponent(cs) + "&select=payload",
+      { headers: CLOUD.hdrs() }).then(function (r) {
+      if (!r.ok) throw new Error("http " + r.status);
+      return r.json();
+    }).then(function (rows) { return (rows && rows[0] && rows[0].payload) || null; });
+  }
+};
+
+(function wireCloudPassport() {
+  var sv = $("#btnPassSave"), ld = $("#btnPassLoad"), st = $("#passportStatus");
+  if (sv) sv.addEventListener("click", function () {
+    if (!Passport.remote) return;
+    if (st) st.textContent = "PUSHING PILOT TO CLOUD…";
+    Passport.remote.push(Passport.dump()).then(function () {
+      if (st) st.textContent = "PILOT SAVED TO CLOUD AS '" + pilot.name + "'.";
+      Sfx.win();
+    }).catch(function () {
+      if (st) st.textContent = "CLOUD UNAVAILABLE — USE EXPORT CODE INSTEAD.";
+      Sfx.lose();
+    });
+  });
+  if (ld) ld.addEventListener("click", function () {
+    if (!Passport.remote) return;
+    if (st) st.textContent = "PULLING PILOT FROM CLOUD…";
+    Passport.remote.pull(pilot.name).then(function (p) {
+      if (!p) {
+        if (st) st.textContent = "NO CLOUD PILOT NAMED '" + pilot.name + "'.";
+        Sfx.lose();
+        return;
+      }
+      Passport.merge(p);
+      refreshHome();
+      renderPilot();
+      if (st) st.textContent = "CLOUD PILOT '" + pilot.name + "' MERGED INTO THIS DEVICE.";
+      Sfx.win();
+    }).catch(function () {
+      if (st) st.textContent = "CLOUD UNAVAILABLE — USE IMPORT CODE INSTEAD.";
+      Sfx.lose();
+    });
+  });
+})();
 
   route();
   window.addEventListener("load", fitCanvas);

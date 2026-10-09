@@ -32,6 +32,12 @@ python3 -m http.server 8000
 - **Vercel:** import repo (`vercel.json` included)
 - **GitHub Pages:** push to `main`, enable Pages (Actions or branch)
 
+## Cloud (optional, Supabase)
+- Schema: `supabase_schema.sql` → run once in the Supabase SQL Editor (creates `runs` + `passports`, RLS on, no deletes)
+- Config lives in `game.js` → `CLOUD` (`url` + public **anon** key — never the service_role key)
+- Leaderboard board pulls cloud rows on open (`SOURCE: CLOUD + DEVICE`), merges with local; passes `CLOUD.on = false` or any failure → falls back to `SOURCE: THIS DEVICE`
+- Pilot passport: `CLOUD SAVE` / `CLOUD LOAD` in the pilot panel (keyed by callsign)
+
 ## Updating content
 - Add sectors in `game.js` → `SECTORS` array (`{id, code, name, story, objective, pattern, speedMul, palette}`); hazards: basic/rain/walls/homing/crossfire/winds/splitters/portals/mix (+boss). S06 gate = all campaign S-ranks via `campaignSectors()`
 - Power-up tiers: `POWERUPS` + `TIER_KEYS`, gating in `tierMax()`
