@@ -238,6 +238,39 @@ h1.glitch::after { color: var(--cyan); animation: glitch-b 2.7s infinite steps(1
 .ghost-btn.primary { background: var(--cyan); color: #04202a; font-weight: 700; }
 .ghost-btn.primary:hover { background: #7df7ff; }
 
+/* ---------- auth modal: unmistakable sign-in actions ---------- */
+.auth-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; align-items: stretch; }
+.auth-btn {
+  display: block; width: 100%;
+  padding: 14px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 240, 255, 0.10);
+  color: var(--cyan);
+  font-family: var(--font-display);
+  font-size: 0.95rem; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  cursor: pointer;
+  transition: 0.18s ease;
+}
+.auth-btn:hover { background: rgba(0, 240, 255, 0.22); transform: translateY(-1px); box-shadow: 0 0 16px rgba(0, 240, 255, 0.30); }
+.auth-btn:active { transform: translateY(0); }
+.auth-btn.primary {
+  background: linear-gradient(180deg, #7df7ff, var(--cyan));
+  border-color: #7df7ff;
+  color: #04202a;
+  box-shadow: 0 0 22px rgba(0, 240, 255, 0.45);
+  font-size: 1.05rem;
+}
+.auth-btn.primary:hover { background: linear-gradient(180deg, #bffbff, #7df7ff); box-shadow: 0 0 30px rgba(0, 240, 255, 0.6); }
+.auth-cancel {
+  background: none; border: 0; cursor: pointer;
+  color: var(--dim); font-size: 0.8rem; letter-spacing: 0.12em;
+  padding: 6px; text-transform: lowercase;
+}
+.auth-cancel:hover { color: var(--cyan); text-decoration: underline; }
+.auth-btn.small { width: auto; padding: 8px 16px; font-size: 0.72rem; border-radius: 10px; }
+
 .home-foot { position: relative; margin-top: 26px; text-align: center; color: var(--dim); }
 .home-foot p { font-size: 0.85rem; letter-spacing: 0.08em; }
 

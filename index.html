@@ -112,7 +112,7 @@
         <h3>YOUR PILOT</h3>
         <div class="auth-row" id="authBox">
           <span class="hint" id="authStatus">NOT SIGNED IN</span>
-          <button class="ghost-btn tiny" id="btnAuthOpen" type="button">SIGN IN</button>
+          <button class="auth-btn primary small" id="btnAuthOpen" type="button">SIGN IN / CREATE PILOT</button>
           <button class="ghost-btn tiny" id="btnAuthOut" type="button" hidden>LOG OUT</button>
           <span id="superBadge" hidden>&#9670; SUPERIOR</span>
         </div>
@@ -313,10 +313,10 @@
       <label for="authPass">PASSWORD</label>
       <input class="text" id="authPass" type="password" maxlength="64" placeholder="Password (6+ chars)" autocomplete="current-password">
       <span class="hint" id="authMsg">New pilot? Tap CREATE. One callsign — one account.</span>
-      <div class="btn-row" style="justify-content:center">
-        <button class="ghost-btn" id="btnAuthCancel" type="button">CANCEL</button>
-        <button class="ghost-btn" id="btnAuthLogin" type="button">SIGN IN</button>
-        <button class="ghost-btn primary" id="btnAuthCreate" type="button">CREATE</button>
+      <div class="auth-actions">
+        <button class="auth-btn primary" id="btnAuthLogin" type="button">SIGN IN&nbsp;&nbsp;→</button>
+        <button class="auth-btn" id="btnAuthCreate" type="button">CREATE NEW PILOT</button>
+        <button class="auth-cancel" id="btnAuthCancel" type="button">cancel</button>
       </div>
     </div>
   </div>
