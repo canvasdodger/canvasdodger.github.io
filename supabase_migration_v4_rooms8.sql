@@ -134,6 +134,7 @@ drop policy if exists "fb_read" on public.feedback;
 create policy "fb_read" on public.feedback for select to authenticated using (public.is_superior());
 drop policy if exists "fb_update" on public.feedback;
 create policy "fb_update" on public.feedback for update to authenticated
+  using (public.is_superior());
 
 -- stamp callsign server-side on chat + feedback (nobody spoofs names)
 create or replace function public.stamp_chat_callsign()
@@ -219,6 +220,7 @@ begin
   update public.room_members set ready = coalesce(p_ready, false),
     seen = (extract(epoch from now()) * 1000)::bigint
   where room_code = p_code and user_id = auth.uid();
+end $$;
 
 -- start_race: host-only. Marks room racing, stamps starts_at = now + 3s (countdown),
 -- and resets every member's race state. Returns the fresh row.
@@ -301,5 +303,3 @@ grant execute on function public.finish_round(text, uuid) to authenticated;
 -- Once deployed with a RESEND_API_KEY secret, wire a cron or DB webhook to call it.
 -- Until then feedback still lands in the `feedback` table and the superior reads
 -- it in-game via the INBOX panel.
-
-end $$;
