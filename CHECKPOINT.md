@@ -1,6 +1,6 @@
 # Canvas Dodger // NEON PROTOCOL — Project Checkpoint
 
-Last updated: 2026-10-09 · HEAD `ed364b8` · branch `main` (in sync with `origin/main`)
+Last updated: 2026-10-12 · branch `main` (Phases 1–5 shipped; Phase 6 release in progress)
 
 ## Where it lives
 - **Live site:** https://canvasdodger.github.io/ (short: https://tinyurl.com/canvasdodger)
@@ -9,11 +9,20 @@ Last updated: 2026-10-09 · HEAD `ed364b8` · branch `main` (in sync with `origi
 - Local workspace: `/mnt/storage/project power/first project` — files `index.html` + `style.css` + `game.js` (all in one IIFE, lines 4→end).
 
 ## Backend (Supabase project ref `rfefjcdxlfcodhwflwrs`)
-- **Tables:** `runs` (cloud leaderboard, immutable except superior), `passports` (per-callsign pilot save), `profiles` (user_id, callsign UNIQUE, email, role), `rooms` (online matches).
-- **RLS:** runs SELECT public; INSERT logged-in w/ `owner=auth.uid()` (anon 401); UPDATE/DELETE superior-only. rooms member-only reads; identity stamped server-side via `create_room`/`join_room`/`rematch_room` RPCs.
-- **Migrations (run in order, SQL Editor):** `supabase_schema.sql` → `supabase_migration_v2_auth.sql` → `supabase_migration_v3_rooms.sql`.
+- **Tables:** `runs` (cloud leaderboard, immutable except superior), `passports` (per-callsign pilot save), `profiles` (user_id, callsign UNIQUE, email, role, **email_notify**), `rooms` + `room_members` + `room_chats` (2–8 player rooms, v4), `feedback` (player comments → owner).
+- **RLS:** runs SELECT public; INSERT logged-in w/ `owner=auth.uid()` (anon 401); UPDATE/DELETE superior-only. rooms/members/chats member-only reads; identity stamped server-side via RPCs. feedback: any signed-in inserts; superior-only reads.
+- **Migrations (run in order, SQL Editor):** `supabase_schema.sql` → `supabase_migration_v2_auth.sql` → `supabase_migration_v3_rooms.sql` → `supabase_migration_v4_rooms8.sql` (**wipes old 1v1 rooms**, adds 2–8 rooms, chat, feedback, `email_notify` + `set_email_notify` RPC).
+- **Feedback → email:** `supabase/functions/forward-feedback/index.ts` (Deno Edge Function) emails new feedback to `kwoffiekiphnic7@gmail.com` via Resend, marks `forwarded=true`. Deploy: `supabase secrets set RESEND_API_KEY=…` then deploy + add a DB webhook on `feedback` INSERT. Until then, owner reads feedback in-game via the superior **INBOX** panel (Leaderboard modal).
 - **Config** in `game.js`: `CLOUD` (url + public anon key — NEVER service_role). `Auth` module = direct fetch to `/auth/v1` (no SDK).
 - **Master account:** callsign `Kiphnic` (stored lowercase `kiphnic`), role `superior`, email `kwoffiekiphnic7@gmail.com`. Password lives only in user's head + Supabase bcrypt (never in repo). Promote a new account: `update public.profiles set role='superior' where lower(callsign)='<name>';`
+
+## Phase status (rebuild plan)
+- **Phase 1 — Critical fixes: DONE.** Controls isolated (only local ship reads input); `YOU + callsign` label on own ship, rival labels on theirs; leaderboard best-only (1 row/pilot); endless P3 FIREWALL eased (wider gaps, slower fall, spawn floor, 2s warning + SHIELD); smarter bots; faster starts.
+- **Phase 2 — Online 2–8: DONE.** 1v1 wiped; host picks 2–8; Brawlhalla-style staging room (roster grid, READY toggle, host START, shared `starts_at` 3-2-1-GO countdown); auto-distinct ship colours; room chat (login-only, 140 chars, 1 msg/1.5s, polled 2s).
+- **Phase 3 — Coins + shop: DONE.** `Coins` wallet (`dodger_coins_v1`), earn-only (`score/100 + graze*2 + win 150 + daily 100`), shop for paints/shapes/flairs with buy→equip, owned items + balance carried in Passport (higher-coins-wins, owned-union). **GH₵ top-up = COMING SOON** (pending — needs a server secret).
+- **Phase 4 — Chat / comments / email: DONE.** Room chat (above); FEEDBACK modal (BUG/IDEA/OTHER) → `feedback` table + offline outbox; superior INBOX panel; `email_notify` opt-in + `set_email_notify` RPC; `forward-feedback` Edge Function (Resend) → owner email.
+- **Phase 5 — LAN mode: DONE.** Offline `sw.js` cache (shell + icons, host-only WebRTC candidates so data-off linking works) + Couch 2–4P (one screen, P1 arrows / P2 A-D / P3 J-L / comma-dot) + WebRTC LAN link 2–8 (host code, manual SDP copy-paste, shared seed ghost-race). No login required. QR invite = backlog.
+- **Phase 6 — Polish/release: IN PROGRESS.** `node --check` clean; playtest matrix + deploy in progress. GH₵ top-up + bulk mailer still pending (need server secrets).
 
 ## Feature status — ALL DONE
 - **Accounts/mandatory login:** `gateMode()` gates DAILY / FLIGHT SCHOOL / MULTIPLAYER / HANGAR / ONLINE. Guests: classic/endless/board-view only. Cloud board writes require session JWT.

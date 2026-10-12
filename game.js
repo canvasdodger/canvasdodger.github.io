@@ -47,7 +47,9 @@
     mute: "dodger_mute_v1",
     tutorial: "dodger_tutorial_v1",
     shipCustom: "dodger_ship_v1",
-    dailyBest: "dodger_daily_best_v1"
+    dailyBest: "dodger_daily_best_v1",
+    coins: "dodger_coins_v1",
+    owned: "dodger_owned_v1"
   };
 
   // per-bot win keys (v2); legacy single counter migrates to easy
@@ -237,7 +239,8 @@
     keys: Object.create(null),
     seq: "",
     pointerDown: false,
-    pointerX: 0
+    pointerX: 0,
+    lastPX: null
   };
 
   // ================= cheat-code arsenal =================
@@ -555,6 +558,72 @@
 var HANGAR = Store.get(K.shipCustom, { shape: "arrow", paint: "cyan", trail: "full", flair: 0 });
 if (typeof HANGAR !== "object" || !HANGAR.shape) { HANGAR = DEFAULT_SHIP; Store.set(K.shipCustom, HANGAR); }
 
+// ================= coins + shop =================
+// Earn-only for now: score/graze/win/daily. GH₵ top-up is PENDING (needs a
+// server secret — can't ship payment keys in a static site).
+var Coins = {
+  get: function () { return Store.get(K.coins, 0) | 0; },
+  add: function (n) { var v = this.get() + (n | 0); Store.set(K.coins, v); this.render(); return v; },
+  spend: function (n) {
+    n = n | 0;
+    if (this.get() < n) return false;
+    Store.set(K.coins, this.get() - n);
+    this.render();
+    return true;
+  },
+  owned: function () {
+    var v = Store.get(K.owned, []);
+    return Array.isArray(v) ? v : [];
+  },
+  owns: function (id) { return this.owned().indexOf(id) >= 0; },
+  grant: function (id) {
+    if (this.owns(id)) return;
+    var list = this.owned();
+    list.push(id);
+    Store.set(K.owned, list);
+  },
+  render: function () {
+    var els = $$(".coin-balance");
+    for (var i = 0; i < els.length; i++) els[i].textContent = lbFmt(this.get());
+  }
+};
+// free defaults every pilot starts with
+var SHOP = {
+  paints: [
+    { id: "cyan",    price: 0 },    { id: "lime",    price: 0 },
+    { id: "magenta", price: 0 },    { id: "amber",   price: 300 },
+    { id: "violet",  price: 500 },  { id: "rose",    price: 700 },
+    { id: "ice",     price: 900 },  { id: "slate",   price: 1200 }
+  ],
+  shapes: [
+    { id: "arrow", price: 0 },  { id: "dart",  price: 250 },
+    { id: "wasp",  price: 450 },{ id: "orb",   price: 650 },
+    { id: "fang",  price: 850 },{ id: "veil",  price: 1500 }
+  ],
+  flairs: [
+    { id: "0", price: 0 },   { id: "1", price: 400 },
+    { id: "2", price: 800 }, { id: "3", price: 1600 }
+  ]
+};
+function shopPrice(kind, id) {
+  var list = SHOP[kind] || [];
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i].price | 0;
+  return 0;
+}
+function isUnlocked(kind, id) {
+  var p = shopPrice(kind, id);
+  if (p <= 0) return true;
+  return Coins.owns(kind + ":" + id);
+}
+function tryBuy(kind, id) {
+  var p = shopPrice(kind, id);
+  if (p <= 0 || Coins.owns(kind + ":" + id)) return true;
+  if (!Coins.spend(p)) { Sfx.lose(); return false; }
+  Coins.grant(kind + ":" + id);
+  Sfx.win();
+  return true;
+}
+
 function openShipModal() {
   if (!gateMode("HANGAR", "customize")) return;
   buildPaintChips();
@@ -563,6 +632,7 @@ function openShipModal() {
   var sc = { shape: HANGAR.shape, paint: HANGAR.paint, trail: HANGAR.trail, flair: HANGAR.flair };
   setShipControls(sc);
   $$("input[name=flair]").forEach(function (r) { r.checked = (Number(r.value) === (HANGAR.flair || 0)); });
+  refreshFlairLocks();
   $("#modalShip").hidden = false;
   try { document.querySelector("#modalShip").scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
 }
@@ -581,8 +651,17 @@ function buildPaintChips() {
     b.style.background = PAINTS[i].hex;
     b.style.color = PAINTS[i].hex;
     b.dataset.id = PAINTS[i].id;
-    b.textContent = PAINTS[i].name;
-    b.addEventListener("click", function () { pickPaint(this.dataset.id); });
+    var unlocked = isUnlocked("paints", PAINTS[i].id);
+    var price = shopPrice("paints", PAINTS[i].id);
+    b.textContent = PAINTS[i].name + (unlocked ? "" : " · " + price);
+    if (!unlocked) b.classList.add("locked");
+    b.addEventListener("click", function () {
+      if (!isUnlocked("paints", this.dataset.id)) {
+        if (!tryBuy("paints", this.dataset.id)) return;
+        buildPaintChips(); buildThumbRow(); setShipControls({ shape: HANGAR.shape, paint: HANGAR.paint, trail: HANGAR.trail, flair: HANGAR.flair });
+      }
+      pickPaint(this.dataset.id);
+    });
     c.appendChild(b);
   }
 }
@@ -593,9 +672,19 @@ function buildShapeRow() {
     var d = document.createElement("div");
     d.className = "shape-cell";
     d.dataset.id = SHIP_SHAPES[i].id;
-    d.innerHTML = '<div class="sd">' + SHIP_SHAPES[i].icon + '</div><div class="sn">' + SHIP_SHAPES[i].label + '</div>';
-    d.title = "Select for your ship";
-    d.addEventListener("click", function () { pickShape(this.dataset.id); });
+    var unlocked = isUnlocked("shapes", SHIP_SHAPES[i].id);
+    var price = shopPrice("shapes", SHIP_SHAPES[i].id);
+    d.innerHTML = '<div class="sd">' + SHIP_SHAPES[i].icon + '</div><div class="sn">' + SHIP_SHAPES[i].label +
+      (unlocked ? "" : '<div class="sprice">◈ ' + price + '</div>') + '</div>';
+    if (!unlocked) d.classList.add("locked");
+    d.title = unlocked ? "Select for your ship" : ("Buy for " + price + " coins");
+    d.addEventListener("click", function () {
+      if (!isUnlocked("shapes", this.dataset.id)) {
+        if (!tryBuy("shapes", this.dataset.id)) return;
+        buildShapeRow(); setShipControls({ shape: HANGAR.shape, paint: HANGAR.paint, trail: HANGAR.trail, flair: HANGAR.flair });
+      }
+      pickShape(this.dataset.id);
+    });
     r.appendChild(d);
   }
 }
@@ -634,6 +723,33 @@ function pickShape(id) {
   if (!HANGAR.paint) { pickPaint(HANGAR.paint); }
 }
 
+// flair radios: reflect ownership (hide price once owned), gate purchases
+function refreshFlairLocks() {
+  $$("#flairRow .opt").forEach(function (lab) {
+    var id = lab.getAttribute("data-flair");
+    var unlocked = isUnlocked("flairs", id);
+    lab.classList.toggle("locked", !unlocked);
+    var sp = lab.querySelector(".sprice");
+    if (sp) sp.hidden = unlocked;
+  });
+}
+function wireFlair() {
+  $$("#flairRow input[name=flair]").forEach(function (r) {
+    r.addEventListener("change", function () {
+      var id = this.value;
+      if (!isUnlocked("flairs", id)) {
+        if (!tryBuy("flairs", id)) {           // not enough coins -> revert
+          var cur = $("#flairRow input[value='" + (HANGAR.flair || 0) + "']");
+          if (cur) cur.checked = true;
+          return;
+        }
+        refreshFlairLocks();
+      }
+      HANGAR.flair = parseInt(id, 10) | 0;
+    });
+  });
+}
+
 function setShipControls(sc) {
   HANGAR = sc;
   var sh = sc.shape || "arrow";
@@ -657,6 +773,7 @@ var bs = $("#btnShipDone");
 if (bs) bs.addEventListener("click", saveShip);
 var bc = $("#btnShipClose");
 if (bc) bc.addEventListener("click", closeShipModal);
+try { wireFlair(); } catch (e) {}
 window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScreen() === "home") location.hash = "#/customize"; });
 
   function campaignSectors() {
@@ -707,6 +824,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     var tut = Store.get(K.tutorial, { done: false });
     var tutMeta = $("#metaTutorial");
     if (tutMeta) tutMeta.textContent = (tut && tut.done) ? "GRADUATED ✓" : "NOT GRADUATED";
+    Coins.render();
   }
 
   function route() {
@@ -728,6 +846,12 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     else if (h === "online") {
       if (!gateMode("ONLINE DUEL", "online")) { location.hash = ""; return; }
       stopLoop(); G.state = "idle"; hideOverlay(); bannerEl.hidden = true; showScreen("online");
+    }
+    else if (h === "lan") {
+      // No login / no cloud gate — LAN is fully offline.
+      NetRival.leave();
+      stopLoop(); G.state = "idle"; hideOverlay(); bannerEl.hidden = true;
+      showScreen("lan"); if (typeof LanNet !== "undefined") LanNet.refreshOfflineChip();
     }
     else if (h === "null") {
       if (prog.nullUnlocked) { showScreen("game"); startMode("null"); }
@@ -816,19 +940,20 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     { name: "PHASE 05 — CROSSFIRE",      pattern: "crossfire" },
     { name: "PHASE 06 — TOTAL COLLAPSE", pattern: "mix" }
   ];
-
+  // Phase 03 = walls. It is the reported difficulty wall — it gets eased
+  // (see EASE_WALLS below) while later phases still ramp.
   // 5-bot ladder: easy < normal < hard < elite < hell (hell = final boss).
   // mistakeEvery: forced misread interval so even top bots stay beatable.
   var BOT_SPECS = {
-    easy:      { maxSpeed: 180, error: 70, react: 0.42, mistakeEvery: 4.0, label: "EASY" },
-    normal:    { maxSpeed: 300, error: 35, react: 0.26, mistakeEvery: 5.5, label: "NORMAL" },
-    hard:      { maxSpeed: 380, error: 20, react: 0.18, mistakeEvery: 6.5, label: "HARD" },
-    elite:     { maxSpeed: 600, error: 3,  react: 0.06, mistakeEvery: 7.0, label: "ELITE" },
-    hell:      { maxSpeed: 560, error: 8,  react: 0.09, mistakeEvery: 6.0, label: "HELL" },
+    easy:      { maxSpeed: 230, error: 58, react: 0.34, mistakeEvery: 4.5, label: "EASY" },
+    normal:    { maxSpeed: 340, error: 28, react: 0.22, mistakeEvery: 6.0, label: "NORMAL" },
+    hard:      { maxSpeed: 440, error: 16, react: 0.15, mistakeEvery: 7.0, label: "HARD" },
+    elite:     { maxSpeed: 620, error: 4,  react: 0.06, mistakeEvery: 7.5, label: "ELITE" },
+    hell:      { maxSpeed: 600, error: 6,  react: 0.08, mistakeEvery: 6.5, label: "HELL" },
     // legacy aliases (old saves / keys keep working)
-    rookie:    { maxSpeed: 180, error: 70, react: 0.42, mistakeEvery: 4.0, label: "EASY" },
-    pro:       { maxSpeed: 380, error: 20, react: 0.18, mistakeEvery: 6.5, label: "HARD" },
-    nightmare: { maxSpeed: 560, error: 8,  react: 0.09, mistakeEvery: 6.0, label: "HELL" }
+    rookie:    { maxSpeed: 230, error: 58, react: 0.34, mistakeEvery: 4.5, label: "EASY" },
+    pro:       { maxSpeed: 440, error: 16, react: 0.15, mistakeEvery: 7.0, label: "HARD" },
+    nightmare: { maxSpeed: 600, error: 6,  react: 0.08, mistakeEvery: 6.5, label: "HELL" }
   };
 
   // ================= game state =================
@@ -842,7 +967,8 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     shake: 0, flash: 0,
     graze: 0, shards: 0, combo: 0, comboT: 0,
     ghostScore: false, won: false,
-    bot: null, seed: 0, rng: null, daily: null
+    bot: null, seed: 0, rng: null, daily: null,
+    couch: null, portalT: null
   };
 
   var player = null;
@@ -995,20 +1121,41 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       G.sector = null;
       G.lives = 1;
       G.timeLeft = 0;
-      G.spawnGap = 0.75;
+      G.spawnGap = 0.55;
       G.phaseIdx = 0;
-      player = makePlayer(200, cheatShipColor(paintById(HANGAR.paint).hex));
-      player.laneMax = 440;
+      // Full-arena shared play: YOU own the whole 960px. The rival is a ghost
+      // drawn translucently so you can always tell your ship from theirs.
+      player = makePlayer(453, cheatShipColor(paintById(HANGAR.paint).hex));
+      player.laneMax = 960;
       if (opts.net) {
-        // ONLINE ghost rival: no AI. Position + alive + seen stream over REST;
-        // collisions stay local, storms are shared via the room seed.
-        G.bot = {
-          ship: makeShip(700, "#7cf6ff"),
-          net: true, rival: opts.rival || "RIVAL",
-          alive: true, remoteX: 700, remoteElapsed: 0,
-          lastSeen: Date.now(), rivalLeft: false,
-          laneMin: 520, laneMax: 930
+        // ONLINE ghost racers (2-8): no AI. Each rival's x/alive/seen streams
+        // over REST; collisions stay local, storms shared via the room seed.
+        // Every ghost gets its own ship + distinct colour from the roster.
+        var gList = opts.ghosts || [];
+        var ghosts = [];
+        for (var gi = 0; gi < gList.length; gi++) {
+          var gsrc = gList[gi];
+          ghosts.push({
+            uid: gsrc.uid, callsign: gsrc.callsign || "RIVAL",
+            ship: makeShip(700, gsrc.color || "#7cf6ff"),
+            remoteX: 700, remoteElapsed: 0, lastSeen: Date.now(),
+            alive: true, rivalLeft: false, ghost: true,
+            laneMin: 0, laneMax: 960
+          });
+        }
+        // backward-compat: first ghost also mirrors the old single-bot fields
+        var first = ghosts[0] || {
+          ship: makeShip(700, "#7cf6ff"), remoteX: 700, remoteElapsed: 0,
+          lastSeen: Date.now(), alive: true, rivalLeft: false, laneMin: 0, laneMax: 960
         };
+        G.bot = {
+          net: true, rival: opts.rival || "RIVAL",
+          ship: first.ship, remoteX: first.remoteX, remoteElapsed: first.remoteElapsed,
+          lastSeen: first.lastSeen, alive: true, rivalLeft: false,
+          laneMin: 0, laneMax: 960, ghost: true,
+          ghosts: ghosts
+        };
+        G.netKind = opts.netKind || "online";   // "online" | "lan"
       } else {
         var spec = BOT_SPECS[G.difficulty] || BOT_SPECS.easy;
         G.bot = {
@@ -1016,12 +1163,55 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
           spec: spec, botId: G.difficulty,
           alive: true, thinkT: 0, targetX: 700,
           mistakeT: (spec.mistakeEvery || 6) * 0.7,
-          laneMin: 520, laneMax: 930
+          laneMin: 0, laneMax: 960
         };
       }
       showScreen("game");
       beginPlay();
     }
+
+    if (mode === "couch") {
+      // LAN COUCH: 2-4 local pilots, one screen, zero network. Each pilot owns a
+      // full-width arena lane-free ship; P1 (arrows) reads the shared pointer.
+      // Last ship alive wins; coins awarded to the local pilot once.
+      G.sector = null;
+      G.lives = 1;
+      G.timeLeft = 0;
+      G.spawnGap = 0.6;
+      G.phaseIdx = 0;
+      G.bot = null;
+      var cfg = opts.couch || { count: 2 };
+      G.couch = { count: cfg.count, ships: [], cooldown: 3 };
+      for (var si2 = 0; si2 < cfg.count; si2++) {
+        var seat = Couch.seats[si2];
+        var sh = makeShip(120 + si2 * 220, seat.color, { shape: "arrow", paint: "cyan", trailKind: "full", flair: 0 });
+        sh.laneMin = 0; sh.laneMax = 960;
+        G.couch.ships.push({
+          ship: sh, keys: seat.keys, tag: seat.tag, name: seat.name,
+          color: seat.color, alive: true, invuln2: 0
+        });
+      }
+      // single-pilot ship also exists (player) so the storm, pickups, obstacles,
+      // HUD, and game-over overlay all reuse the normal path untouched.
+      player = G.couch.ships[0].ship;
+      showScreen("game");
+      beginPlay();
+      showBanner("COUCH · " + cfg.count + " PILOTS · LAST ALIVE WINS", 1.8);
+    }
+  }
+
+  // LAN COUCH launcher — no network, no login. 2-4 pilots share one screen.
+  function startCouch(count) {
+    count = Math.max(2, Math.min(4, count || 2));
+    Sfx.ensure();
+    stopLoop();
+    if (location.hash !== "#/lan") { location.hash = ""; }
+    NetRival.leave();
+    LanNet.leave();
+    hideOverlay();
+    bannerEl.hidden = true;
+    showScreen("game");
+    startMode("couch", { couch: { count: count } });
   }
 
   // ================= tutorial (flight school) =================
@@ -1222,51 +1412,27 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     var pal = paletteNow();
     var base = (G.mode === "endless" ? 150 + G.elapsed * 1.6 : 170) * (G.sector ? G.sector.speedMul : 1);
     function blockSpeed() { return base + r() * 90; }
-    // multiplayer: keep hazards fair — spawn one per lane so both racers face the same pressure
-    var lane = null;
-    if (G.mode === "multiplayer") {
-      lane = (r() < 0.5) ? { min: 8, max: 440 } : { min: 520, max: 952 };
-    }
+    // multiplayer: full shared arena — no lane split (everyone flies 0-960)
 
     if (pattern === "basic" || pattern === "rain") {
       var count = pattern === "rain" ? 1 + ((r() * 2) | 0) : 1;
       for (var i = 0; i < count; i++) {
         var size = 26 + r() * 34;
-        if (lane) {
-          addBlock(lane.min + r() * Math.max(10, lane.max - lane.min - size), -size - r() * 40, size, size, blockSpeed(), pal.enemy);
-          lane = (lane.min < 500) ? { min: 520, max: 952 } : { min: 8, max: 440 };
-        } else {
-          addBlock(r() * (960 - size), -size - r() * 40, size, size, blockSpeed(), pal.enemy);
-        }
+        addBlock(r() * (960 - size), -size - r() * 40, size, size, blockSpeed(), pal.enemy);
       }
     } else if (pattern === "walls") {
-      var spd = blockSpeed() * 0.9;
-      if (G.mode === "multiplayer") {
-        // one wall-with-gap per lane: both racers dodge the same beat
-        [{ min: 0, max: 480 }, { min: 480, max: 960 }].forEach(function (L) {
-          var gapW = 130 + r() * 50;
-          var gapX = L.min + 16 + r() * Math.max(10, (L.max - L.min) - gapW - 32);
-          addBlock(L.min, -26, Math.max(0, gapX - L.min), 26, spd, pal.enemy, { type: "wall", grazed: true });
-          addBlock(gapX + gapW, -26, Math.max(0, L.max - (gapX + gapW)), 26, spd, pal.enemy, { type: "wall", grazed: true });
-          obstacles.push({ x: gapX, y: -46, w: gapW, h: 20, vy: spd, vx: 0, type: "warn", color: pal.accent, grazed: true });
-        });
-      } else {
-        var gapW0 = 150 + r() * 70;
-        var gapX0 = 30 + r() * (960 - gapW0 - 60);
-        addBlock(0, -26, gapX0, 26, spd, pal.enemy, { type: "wall", grazed: true });
-        addBlock(gapX0 + gapW0, -26, 960 - (gapX0 + gapW0), 26, spd, pal.enemy, { type: "wall", grazed: true });
-        obstacles.push({ x: gapX0, y: -46, w: gapW0, h: 20, vy: spd, vx: 0, type: "warn", color: pal.accent, grazed: true });
-      }
+      // ENDLESS P3 EASE: wider gaps + slower fall. Later phases still ramp.
+      var wallsEase = (G.mode === "endless") ? 0.79 : 0.9;
+      var spd = blockSpeed() * wallsEase;
+      var wallsGapBump = (G.mode === "endless") ? 40 : 0;   // +40px gap on endless
+      var gapW0 = 150 + r() * 70 + wallsGapBump;
+      var gapX0 = 30 + r() * (960 - gapW0 - 60);
+      addBlock(0, -26, gapX0, 26, spd, pal.enemy, { type: "wall", grazed: true });
+      addBlock(gapX0 + gapW0, -26, 960 - (gapX0 + gapW0), 26, spd, pal.enemy, { type: "wall", grazed: true });
+      obstacles.push({ x: gapX0, y: -46, w: gapW0, h: 20, vy: spd, vx: 0, type: "warn", color: pal.accent, grazed: true });
     } else if (pattern === "homing") {
-      if (G.mode === "multiplayer") {
-        [{ min: 8, max: 440 }, { min: 520, max: 952 }].forEach(function (L) {
-          var s2 = 30 + r() * 14;
-          addBlock(L.min + r() * Math.max(10, L.max - L.min - s2), -s2, s2, s2, 140 + r() * 60, pal.enemy, { type: "homing", homeT: 2.0, laneMin: L.min, laneMax: L.max });
-        });
-      } else {
-        var hs = 34 + r() * 16;
-        addBlock(r() * (960 - hs), -hs, hs, hs, 140 + r() * 60, pal.enemy, { type: "homing", homeT: 2.0 });
-      }
+      var hs = 34 + r() * 16;
+      addBlock(r() * (960 - hs), -hs, hs, hs, 140 + r() * 60, pal.enemy, { type: "homing", homeT: 2.0 });
     } else if (pattern === "crossfire") {
       var fromLeft = r() > 0.5;
       var sz = 30 + r() * 20;
@@ -1334,7 +1500,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     var kind = weighted[(r() * weighted.length) | 0];
     var spec = POWERUPS[kind];
     var px = 30 + r() * 900;
-    if (G.mode === "multiplayer") px = 30 + r() * 370;   // player lane only — bot doesn't use power-ups
+    if (G.mode === "multiplayer") px = 30 + r() * 900;   // shared arena — anywhere is fair game
     pickups.push({ x: px, y: -20, w: 24, h: 24, vy: 130, kind: kind, color: spec.color });
   }
 
@@ -1627,7 +1793,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
 
   function loseRun() {
     G.state = "over";
-    if (G.mode === "multiplayer" && G.bot && G.bot.net) NetRival.push(player.x, false, G.elapsed, true);
+    if (G.mode === "multiplayer" && G.bot && G.bot.net) NET.push(player.x, false, G.elapsed, true);
     submitRun(false);
     Sfx.droneStop();
     Sfx.lose();
@@ -1697,19 +1863,39 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   }
 
   function netWinFlow(playerWon) {
-    NetRival.finish(playerWon);
-    var rival = (G.bot && G.bot.rival) || "RIVAL";
-    var left = !!(G.bot && G.bot.rivalLeft);
-    var head = playerWon
-      ? (left ? "RIVAL LOST — YOU TAKE THE ROUND" : "YOU OUTLASTED " + rival)
-      : (rival + " OUTLASTED YOU");
+    NET.finish(playerWon);
+    var ghosts = (G.bot && G.bot.ghosts) || [];
     var myT = G.elapsed.toFixed(1);
-    var rvT = (((G.bot && G.bot.remoteElapsed) || 0)).toFixed(1);
+    var head, stats;
+    if (ghosts.length) {
+      // 2-8 roster race: report survivors + top rival time
+      var alive = [], bestT = 0, bestName = "";
+      for (var i = 0; i < ghosts.length; i++) {
+        var g = ghosts[i];
+        if (g.alive && !g.rivalLeft) alive.push(String(g.callsign || "RIVAL").slice(0, 12).toUpperCase());
+        if ((g.remoteElapsed || 0) > bestT) { bestT = g.remoteElapsed || 0; bestName = String(g.callsign || "RIVAL").slice(0, 12).toUpperCase(); }
+      }
+      head = playerWon
+        ? "LAST ONE STANDING — YOU TAKE THE ROUND"
+        : (alive.length ? alive.join(", ") + " OUTLASTED YOU" : "STORM WINS");
+      stats = "<span>YOU " + myT + "s</span><span>SURVIVORS: " + (alive.length || 0) + "/" + ghosts.length + "</span>" +
+              (bestName ? "<span>BEST RIVAL " + bestName + " " + bestT.toFixed(1) + "s</span>" : "");
+    } else {
+      var rival = (G.bot && G.bot.rival) || "RIVAL";
+      var left = !!(G.bot && G.bot.rivalLeft);
+      head = playerWon
+        ? (left ? "RIVAL LOST — YOU TAKE THE ROUND" : "YOU OUTLASTED " + rival)
+        : (rival + " OUTLASTED YOU");
+      var rvT = (((G.bot && G.bot.remoteElapsed) || 0)).toFixed(1);
+      stats = "<span>YOU " + myT + "s</span><span>" + rival + " " + rvT + "s</span>";
+    }
+    var backTo = (G.netKind === "lan") ? "lan" : "lobby";
+    var backLabel = (G.netKind === "lan") ? "LAN LOBBY" : "LOBBY";
     showOverlay(
       '<h2 class="' + (playerWon ? "win" : "lose") + '">' + head + "</h2>" +
-      '<div class="stats"><span>YOU ' + myT + "s</span><span>" + rival + " " + rvT + "s</span></div>" +
+      '<div class="stats">' + stats + '</div>' +
       '<div class="btn-row"><button class="ghost-btn primary" data-act="rematch">REMATCH</button>' +
-      '<button class="ghost-btn" data-act="lobby">LOBBY</button>' +
+      '<button class="ghost-btn" data-act="' + backTo + '">' + backLabel + '</button>' +
       '<button class="ghost-btn" data-act="home">HOME</button></div>'
     );
     hudStatus.textContent = playerWon ? "VICTORY" : "DEFEAT";
@@ -1722,8 +1908,14 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     var spdCheat = cheatDef();
     var spd = player.speed * ((spdCheat && spdCheat.speedMul) || 1);
     if (Input.pointerDown) {
-      x = (Input.pointerX - view.ox) / (view.scale || 1) - player.w / 2;
+      // relative drag: ship follows your finger delta, never teleports to the
+      // touch point. Keeps touch control smooth and predictable mid-fight.
+      if (Input.lastPX == null) Input.lastPX = Input.pointerX;
+      var dx = (Input.pointerX - Input.lastPX) / (view.scale || 1);
+      Input.lastPX = Input.pointerX;
+      x += dx;
     } else {
+      Input.lastPX = null;
       if (Input.keys.ArrowLeft) x -= spd * dt;
       if (Input.keys.ArrowRight) x += spd * dt;
     }
@@ -1753,31 +1945,45 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     b.thinkT -= dt;
     if (b.thinkT <= 0) {
       b.thinkT = b.spec.react;
-      var best = null, bestD = 1e9;
+      // Smarter read: look at the 2 nearest incoming threats (not just 1) and
+      // prefer the dodge that clears BOTH. Hard/elite/hell also glance further.
+      var threats = [];
       for (var i = 0; i < obstacles.length; i++) {
         var o = obstacles[i];
         if (o.x + o.w < b.laneMin || o.x > b.laneMax) continue;
         if (o.type === "warn") continue;
         if (o.y > s.y + s.h) continue;                 // already passed the ship
         var d = s.y - (o.y + o.h);                     // gap to closest edge; smaller = more urgent
-        if (d >= -30 && d < bestD) { bestD = d; best = o; }
+        if (d >= -60) threats.push({ o: o, d: d });
       }
-      if (best) {
-        // hell/elite look one extra threat ahead so they feel inhuman
-        var hard = (b.botId === "hell" || b.botId === "elite");
-        var dodgeBias = hard ? 26 : 14;
+      threats.sort(function (a2, b2) { return a2.d - b2.d; });
+      var top = threats.slice(0, 2);
+      if (top.length) {
+        var hard = (b.botId === "hell" || b.botId === "elite" || b.botId === "hard");
+        var dodgeBias = hard ? 28 : 16;
+        var best = top[0].o;
         var cand = [];
         if (best.x - s.w - dodgeBias >= b.laneMin) cand.push(best.x - s.w - dodgeBias);
         if (best.x + best.w + dodgeBias + s.w <= b.laneMax) cand.push(best.x + best.w + dodgeBias);
         var tx;
         if (!cand.length) tx = b.laneMin;
         else if (cand.length === 1) tx = cand[0];
-        else tx = Math.abs(cand[0] - s.x) < Math.abs(cand[1] - s.x) ? cand[0] : cand[1];
-        var err = mistakeNow ? b.spec.error * 3.2 : b.spec.error;
+        else {
+          // pick the side that is also clear of the 2nd threat
+          var second = top[1] && top[1].o;
+          var sideOk = function (c) {
+            if (!second) return true;
+            return !(c + s.w > second.x - dodgeBias && c < second.x + second.w + dodgeBias);
+          };
+          var okCand = cand.filter(sideOk);
+          if (okCand.length) cand = okCand;
+          tx = Math.abs(cand[0] - s.x) < Math.abs(cand[1] - s.x) ? cand[0] : cand[1];
+        }
+        var err = mistakeNow ? b.spec.error * 2.6 : b.spec.error;
         b.targetX = tx + rand(-err, err);
       } else {
         b.targetX = b.laneMin + (b.laneMax - b.laneMin) / 2 - s.w / 2;
-        if (mistakeNow) b.targetX += rand(-80, 80);
+        if (mistakeNow) b.targetX += rand(-70, 70);
       }
       b.targetX = clamp(b.targetX, b.laneMin, b.laneMax - s.w);
     }
@@ -1785,6 +1991,10 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     var cap = b.spec.maxSpeed;
     if ((b.botId === "hell" || b.botId === "elite") && player && G.elapsed > 45) {
       cap = Math.min(cap, 420 + G.elapsed * 1.1);
+    }
+    // warm-up floor: even EASY keeps pace early so it feels like a real rival
+    if (player && G.elapsed < 20) {
+      cap = Math.max(cap, 300);
     }
     s.x += clamp(b.targetX - s.x, -cap * dt, cap * dt);
     s.x = clamp(s.x, b.laneMin, b.laneMax - s.w);
@@ -1803,10 +2013,11 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     }
     if (G.mode === "endless") return PHASES[Math.min(G.phaseIdx, PHASES.length - 1)].pattern;
     if (G.mode === "multiplayer") {
-      if (G.elapsed < 25) return "basic";
-      if (G.elapsed < 50) return "rain";
-      if (G.elapsed < 75) return "walls";
-      if (G.elapsed < 100) return "homing";
+      // FAST START: heat up within the first seconds, then ramp to mix.
+      if (G.elapsed < 8) return "basic";
+      if (G.elapsed < 20) return "rain";
+      if (G.elapsed < 45) return "walls";
+      if (G.elapsed < 75) return "homing";
       return "mix";
     }
     return "basic";
@@ -1821,12 +2032,238 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   }
 
   // ================= update =================
+  // ---- LAN COUCH: 2-4 local pilots on one screen (no network) ----
+  var Couch = {
+    // P1 arrows, P2 A/D, P3 J/L, P4 comma/period. Distinct colours + tags.
+    seats: [
+      { tag: "P1 · YOU", name: "P1", keys: { l: "arrowleft", r: "arrowright" }, color: "#00f0ff" },
+      { tag: "P2", name: "P2", keys: { l: "a", r: "d" }, color: "#ff2bd6" },
+      { tag: "P3", name: "P3", keys: { l: "j", r: "l" }, color: "#5dff9a" },
+      { tag: "P4", name: "P4", keys: { l: ",", r: "." }, color: "#ffb454" }
+    ],
+    // Launchers used by the LAN wiring. Delegates to the module start/stop fns.
+    start: function (count) { startCouch(count); },
+    leave: function () { if (G.mode === "couch") goHome(); }
+  };
+
+  function couchMoveShip(entry, dt) {
+    var s = entry.ship;
+    if (!s) return;
+    var spd = s.speed || 560;
+    var kb = Input.keys || {};
+    var kb2 = entry.keys || {};
+    if (kb2.l && kb[kb2.l]) s.x -= spd * dt;
+    if (kb2.r && kb[kb2.r]) s.x += spd * dt;
+    if (entry === G.couch.ships[0] && Input.pointerDown && Input.pointerX != null) {
+      var cur = s.x + s.w / 2;
+      s.x += clamp(Input.pointerX - cur, -spd * dt, spd * dt);
+    }
+    s.x = clamp(s.x, 8, 960 - s.w - 8);
+    if (entry.invuln2 > 0) entry.invuln2 -= dt;
+    if (s.trail) {
+      s.trail.push({ x: s.x + s.w / 2, y: s.y + s.h, t: 0.35 });
+      if (s.trail.length > 26) s.trail.shift();
+    }
+  }
+
+  function couchHurtShip(entry) {
+    if (!entry || !entry.ship) return;
+    var s = entry.ship;
+    if (!entry.alive || entry.invuln2 > 0 || G.phaseUpT > 0) return;
+    entry.invuln2 = 1.4;
+    burst(s.x + s.w / 2, s.y + s.h / 2, entry.color, 20);
+    Sfx.hit();
+    G.shake = Math.max(G.shake, 12);
+    entry.alive = false;
+    addPopup(s.x + s.w / 2, s.y - 10, entry.name + " DOWN", "#ff5d8a");
+    var left = 0;
+    for (var i = 0; i < G.couch.ships.length; i++) if (G.couch.ships[i].alive) left++;
+    if (left <= 1) couchResolve();
+  }
+
+  function couchResolve() {
+    var winner = null;
+    for (var i = 0; i < G.couch.ships.length; i++) {
+      if (G.couch.ships[i].alive) { winner = G.couch.ships[i]; break; }
+    }
+    G.state = "over";
+    G.won = !!winner && (winner === G.couch.ships[0]);
+    if (!G.ghostScore && !activeCheat) {
+      var earn = Math.floor(G.score / 100) + (G.graze | 0) * 2 + (G.won ? 150 : 0);
+      if (earn > 0) Coins.add(earn);
+      LB.submit({ mode: "multiplayer", date: "", score: G.score, time: G.elapsed, won: G.won, rank: "" });
+    }
+    Sfx.droneStop();
+    if (G.won) { Sfx.win(); G.flash = 0.5; } else { Sfx.lose(); }
+    var label = winner ? (winner.name + (winner === G.couch.ships[0] ? " (YOU)" : "")) : "NOBODY";
+    hudStatus.textContent = G.won ? "VICTORY" : "DEFEAT";
+    showOverlay(
+      "<h2>" + (G.won ? "YOU WIN" : (winner ? winner.name + " WINS" : "DRAW")) + "</h2>" +
+      '<p class="story">COUCH MATCH · ' + G.couch.count + " PILOTS · " +
+      G.elapsed.toFixed(1) + "s · LAST ALIVE: " + label + "</p>" +
+      '<div class="stats"><span>SCORE ' + Math.floor(G.score) + '</span><span>GRAZES ' + G.graze + '</span></div>' +
+      '<div class="btn-row">' +
+      '<button class="ghost-btn primary" data-act="restart">REMATCH</button>' +
+      '<button class="ghost-btn" data-act="lan">LAN LOBBY</button>' +
+      '<button class="ghost-btn" data-act="home">HOME</button></div>'
+    );
+  }
+
+  function updateCouch(dt) {
+    G.elapsed += dt;
+    if (G.couch.cooldown > 0) G.couch.cooldown -= dt;
+    var tkeys = ["slowT", "freezeT", "magnetT", "phaseUpT", "x2T", "overT"];
+    for (var ti = 0; ti < tkeys.length; ti++) if (G[tkeys[ti]] > 0) G[tkeys[ti]] = Math.max(0, G[tkeys[ti]] - dt);
+    G.comboT = Math.max(0, G.comboT - dt);
+    if (G.comboT <= 0) G.combo = 0;
+    G.shake = Math.max(0, G.shake - dt * 40);
+    G.flash = Math.max(0, G.flash - dt);
+    if (G.bannerT > 0) { G.bannerT -= dt; if (G.bannerT <= 0) bannerEl.hidden = true; }
+    G.score += dt * 12;
+    for (var m = 0; m < G.couch.ships.length; m++) {
+      if (G.couch.ships[m].alive) couchMoveShip(G.couch.ships[m], dt);
+    }
+    G.spawnT += dt;
+    if (G.spawnT >= Math.max(0.34, 0.6 - G.elapsed * 0.004)) {
+      G.spawnT = 0;
+      var which = (G.rng() * 5) | 0;
+      spawnPattern(["basic", "rain", "walls", "crossfire", "homing"][which], G.rng);
+    }
+    G.pkTmr -= dt;
+    if (G.pkTmr <= 0) { G.pkTmr = 4; spawnPickup(); }
+    updateFx(dt);
+    updateCouchPlay(dt);
+    if (G.state === "playing") updateCouchHud();
+  }
+
+  function updateCouchHud() {
+    var alive = 0;
+    for (var i = 0; i < G.couch.ships.length; i++) if (G.couch.ships[i].alive) alive++;
+    hudMidVal.textContent = "COUCH · " + alive + "/" + G.couch.count + " ALIVE · " + G.elapsed.toFixed(1) + "s";
+    hudScore.textContent = Math.floor(G.score);
+    hudStatus.textContent = "LIVE";
+  }
+
+  function drawCouchFx() { drawFx(); }
+
+  // particles / popups — shared with the couch engine
+  function updateFx(dt) {
+    for (var pi = particles.length - 1; pi >= 0; pi--) {
+      var pa = particles[pi];
+      pa.t += dt;
+      if (pa.t >= pa.life) { particles.splice(pi, 1); continue; }
+      pa.x += pa.vx * dt;
+      pa.y += pa.vy * dt;
+      pa.vx *= 0.96;
+      pa.vy *= 0.96;
+    }
+    for (var pj = popups.length - 1; pj >= 0; pj--) {
+      var pp = popups[pj];
+      pp.t += dt;
+      if (pp.t >= pp.life) { popups.splice(pj, 1); continue; }
+      pp.y -= 34 * dt;
+    }
+  }
+
+  // couch obstacle move + per-ship collisions + pickups for P1
+  function updateCouchPlay(dt) {
+    var speedScale = (G.slowT > 0) ? 0.55 : (G.x2T > 0) ? 1.4 : 1;
+    for (var i = obstacles.length - 1; i >= 0; i--) {
+      var ob = obstacles[i];
+      if (ob.type === "homing" && ob.homeT > 0) {
+        ob.homeT -= dt;
+        var near = null, nd = 1e9;
+        for (var h = 0; h < G.couch.ships.length; h++) {
+          if (!G.couch.ships[h].alive) continue;
+          var dd = Math.abs((G.couch.ships[h].ship.x + G.couch.ships[h].ship.w / 2) - (ob.x + ob.w / 2));
+          if (dd < nd) { nd = dd; near = G.couch.ships[h].ship; }
+        }
+        if (near) ob.x += clamp((near.x + near.w / 2) - (ob.x + ob.w / 2), -120 * dt, 120 * dt);
+      }
+      ob.y += ob.vy * dt * speedScale;
+      ob.x += (ob.vx || 0) * dt;
+      if (ob.x < 0 && ob.vx) { ob.x = 0; ob.vx *= -1; }
+      if (ob.x + ob.w > 960 && ob.vx) { ob.x = 960 - ob.w; ob.vx *= -1; }
+      if (ob.y > 560 + ob.h) {
+        if (ob.type === "splitter" && !ob.splitDone && ob.y < 640 + ob.h) splitBlock(ob);
+        obstacles.splice(i, 1); continue;
+      }
+      if (ob.type === "warn") continue;
+      // gusts shove EVERY living couch ship; portals teleport any overlapping ship
+      if (ob.type === "gust" && G.phaseUpT <= 0) {
+        for (var g2 = 0; g2 < G.couch.ships.length; g2++) {
+          var gs = G.couch.ships[g2];
+          if (!gs.alive || gs.invuln2 > 0) continue;
+          if (gs.ship.x + gs.ship.w > ob.x && gs.ship.x < ob.x + ob.w &&
+              gs.ship.y + gs.ship.h > ob.y && gs.ship.y < ob.y + ob.h) {
+            gs.ship.x = clamp(gs.ship.x + ob.gustDir * ob.gustForce * dt, 8, 960 - gs.ship.w - 8);
+          }
+        }
+        continue;
+      }
+      if (ob.type === "portal" && G.phaseUpT <= 0) {
+        for (var q2 = 0; q2 < G.couch.ships.length; q2++) {
+          var qs = G.couch.ships[q2];
+          if (!qs.alive || qs.invuln2 > 0) continue;
+          if (qs.ship.x + qs.ship.w > ob.x && qs.ship.x < ob.x + ob.w &&
+              qs.ship.y + qs.ship.h > ob.y && qs.ship.y < ob.y + ob.h) {
+            var mate = portalMate(ob);
+            if (mate) {
+              qs.ship.x = clamp(mate.x + mate.w / 2 - qs.ship.w / 2, 8, 960 - qs.ship.w - 8);
+              qs.ship.y = clamp(mate.y - qs.ship.h - 6, 60, 500);
+              qs.invuln2 = Math.max(qs.invuln2, 0.9);
+              burst(qs.ship.x + qs.ship.w / 2, qs.ship.y, paletteNow().accent, 12);
+            }
+          }
+        }
+        continue;
+      }
+      if (G.couch.cooldown > 0) continue;
+      for (var c = 0; c < G.couch.ships.length; c++) {
+        var en = G.couch.ships[c];
+        if (!en.alive || en.invuln2 > 0 || G.phaseUpT > 0) continue;
+        if (aabb({ x: en.ship.x, y: en.ship.y, w: en.ship.w, h: en.ship.h }, ob)) {
+          if (ob.type === "splitter" && !ob.splitDone) { splitBlock(ob); obstacles.splice(i, 1); en.invuln2 = 0.6; break; }
+          couchHurtShip(en);
+          if (ob.type !== "wall") { obstacles.splice(i, 1); }
+          break;
+        }
+      }
+    }
+    for (var p = pickups.length - 1; p >= 0; p--) {
+      var pk = pickups[p];
+      pk.y += pk.vy * dt * speedScale;
+      if (pk.y > 560) { pickups.splice(p, 1); continue; }
+      if (player && aabb({ x: player.x, y: player.y, w: player.w, h: player.h }, pk)) {
+        applyPickup(pk.kind);
+        pickups.splice(p, 1);
+      }
+    }
+  }
+
   function updateNetBot(dt) {
     var b = G.bot;
     if (!b) return;
+    // 2-8 online: lerp EVERY ghost toward its remoteX. Single-bot fallback below.
+    var list = (b.ghosts && b.ghosts.length) ? b.ghosts : null;
+    var cap = 900;                     // fast ghost follow, capped (no snap)
+    function stepGhost(gship, rx) {
+      var tx2 = (typeof rx === "number") ? rx : gship.x;
+      gship.x += clamp(tx2 - gship.x, -cap * dt, cap * dt);
+      gship.x = clamp(gship.x, 0, 960 - gship.w);
+      gship.trail.push({ x: gship.x + gship.w / 2, y: gship.y + gship.h, t: 0.35 });
+      if (gship.trail.length > 26) gship.trail.shift();
+      gship.invuln = Math.max(0, gship.invuln - dt);
+    }
+    if (list) {
+      for (var gi = 0; gi < list.length; gi++) {
+        if (list[gi].rivalLeft) continue;
+        stepGhost(list[gi].ship, list[gi].remoteX);
+      }
+      return;
+    }
     var s = b.ship;
     var tx = (typeof b.remoteX === "number") ? b.remoteX : s.x;
-    var cap = 900;                     // fast ghost follow, capped (no snap)
     s.x += clamp(tx - s.x, -cap * dt, cap * dt);
     s.x = clamp(s.x, b.laneMin, b.laneMax - s.w);
     s.trail.push({ x: s.x + s.w / 2, y: s.y + s.h, t: 0.35 });
@@ -1905,7 +2342,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     if (G.mode === "multiplayer") {
       if (G.bot && G.bot.net) updateNetBot(dt); else updateBot(dt);
     }
-    if (G.mode === "multiplayer" && G.bot && G.bot.net) NetRival.push(player.x, true, G.elapsed);
+    if (G.mode === "multiplayer" && G.bot && G.bot.net) NET.push(player.x, true, G.elapsed);
 
     if (G.mode === "endless") {
       G.phaseClock += dt;
@@ -1923,8 +2360,8 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
 
     G.spawnT += dt;
     var gap = 0.8;
-    if (G.mode === "endless") gap = Math.max(0.26, 0.8 - G.elapsed * 0.006);
-    else if (G.mode === "multiplayer") gap = Math.max(0.3, 0.75 - G.elapsed * 0.004);
+    if (G.mode === "endless") gap = Math.max(0.34, 0.8 - G.elapsed * 0.006);
+    else if (G.mode === "multiplayer") gap = Math.max(0.3, 0.55 - G.elapsed * 0.004);
     else if (G.mode === "tutorial") gap = G.spawnGap;
     else if (G.mode === "null") gap = 0.6;
     else if (G.sector) gap = G.sector.pattern === "boss" ? 9 : G.spawnGap;
@@ -1944,7 +2381,8 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     }
 
     G.pkTmr -= dt;
-    if (G.pkTmr <= 0) { G.pkTmr = 6 + G.rng() * 3; spawnPickup(); }
+    // FAST START: first pickup lands at ~2.5s, then the usual 6-9s cadence
+    if (G.pkTmr <= 0) { G.pkTmr = (G.elapsed < 3 ? 2.5 : 6 + G.rng() * 3); spawnPickup(); }
 
     var speedScale = 1;
     if (G.slowT > 0) speedScale *= 0.45;
@@ -1966,13 +2404,10 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       var ob = obstacles[i];
       if (ob.type === "homing" && ob.homeT > 0 && player) {
         ob.homeT -= dt;
-        // multiplayer: homing drones stay in their own lane (fair race)
-        var tgt = (G.bot && ob.laneMin != null && (player.x + player.w / 2) > 480 !== (ob.laneMin > 480))
-          ? G.bot.ship : player;
-        var tAlive = (tgt === player) || (G.bot && G.bot.alive);
-        var pc = (tgt.x + tgt.w / 2);
+        // shared arena: every homing drone chases YOU (the local player)
+        var tAlive = true;
+        var pc = (player.x + player.w / 2);
         if (tAlive) ob.x += clamp(pc - (ob.x + ob.w / 2), -120 * dt, 120 * dt);
-        if (ob.laneMin != null) ob.x = clamp(ob.x, ob.laneMin, Math.max(ob.laneMin, ob.laneMax - ob.w));
       }
       ob.y += ob.vy * dt * speedScale;
       ob.x += (ob.vx || 0) * dt;
@@ -2076,7 +2511,15 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     }
 
     if (G.mode === "multiplayer") {
-      if (!G.bot.alive) { winRun(); return; }
+      if (G.bot && G.bot.net) {
+        // 2-8 online: YOU win only when EVERY other racer is gone.
+        var gl = G.bot.ghosts || [];
+        var anyAlive = false;
+        for (var q = 0; q < gl.length; q++) {
+          if (gl[q].alive && !gl[q].rivalLeft) { anyAlive = true; break; }
+        }
+        if (!anyAlive) { winRun(); return; }
+      } else if (!G.bot.alive) { winRun(); return; }
     }
 
     // shards
@@ -2180,6 +2623,10 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     } else if (G.mode === "tutorial") {
       mid = "FLIGHT SCHOOL · STEP " + Math.min(TUT.idx + 1, TUT_STEPS.length) + "/" + TUT_STEPS.length +
         (G.shield ? " · SHIELD" : "");
+    } else if (G.mode === "couch" && G.couch) {
+      var calive = 0;
+      for (var hi2 = 0; hi2 < G.couch.ships.length; hi2++) if (G.couch.ships[hi2].alive) calive++;
+      mid = "COUCH · " + calive + "/" + G.couch.count + " ALIVE · " + G.elapsed.toFixed(1) + "s";
     } else mid = "—";
     var hudCheat = cheatDef();
     if (hudCheat && mid !== "—") mid = "⚡" + hudCheat.tag + " · " + mid;
@@ -2226,20 +2673,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     for (var gx = 0; gx < 960; gx += 60) { ctx.moveTo(gx, 0); ctx.lineTo(gx, 540); }
     ctx.stroke();
 
-    if (G.mode === "multiplayer") {
-      ctx.strokeStyle = "rgba(255,255,255,0.25)";
-      ctx.setLineDash([10, 12]);
-      ctx.beginPath();
-      ctx.moveTo(480, 0); ctx.lineTo(480, 540);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.fillStyle = "rgba(255,255,255,0.35)";
-      ctx.font = "600 14px Rajdhani, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("YOU", 240, 500);
-      ctx.fillText("BOT", 720, 500);
-      ctx.textAlign = "left";
-    }
+    // multiplayer now uses a full shared arena — no lane divider needed
   }
 
   function drawShip(s, label) {
@@ -2628,10 +3062,39 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     drawPickups(time);
     drawObstacles(time);
     drawBoss(time);
-    drawShip(player, null);
-    if (G.bot && G.bot.alive) {
-      var botLabel = G.bot.net ? (G.bot.rival || "RIVAL") : ((G.bot.spec && G.bot.spec.label) || (G.bot.botId || G.difficulty || "").toUpperCase());
-      drawShip(G.bot.ship, botLabel);
+    if (G.mode === "couch" && G.couch && G.couch.ships.length) {
+      // Couch: every local pilot drawn solid with its P# + colour. No ghosts here.
+      for (var ci = 0; ci < G.couch.ships.length; ci++) {
+        var cs = G.couch.ships[ci];
+        if (!cs.alive) continue;
+        drawShip(cs.ship, cs.tag);
+      }
+      drawCouchFx();
+    } else {
+      var myCs = (Auth.ok() && Auth.callsign()) || (pilot && pilot.name) || "YOU";
+      drawShip(player, "YOU · " + String(myCs).slice(0, 14).toUpperCase());
+      if (G.bot && G.bot.net && G.bot.ghosts && G.bot.ghosts.length) {
+        // 2-8 online: draw every rival ghost, each with its own callsign + colour
+        for (var ggi = 0; ggi < G.bot.ghosts.length; ggi++) {
+          var gh = G.bot.ghosts[ggi];
+          if (!gh.alive || gh.rivalLeft) continue;
+          ctx.save();
+          ctx.globalAlpha = 0.7;   // ghosts translucent — YOU stay solid
+          drawShip(gh.ship, String(gh.callsign || "RIVAL").slice(0, 14).toUpperCase());
+          ctx.restore();
+        }
+      } else if (G.bot && G.bot.alive) {
+        var botLabel = G.bot.net ? (G.bot.rival || "RIVAL") : ((G.bot.spec && G.bot.spec.label) || (G.bot.botId || G.difficulty || "").toUpperCase());
+        // ghost rival: semi-transparent so YOU always read as the solid ship
+        if (G.bot.ghost) {
+          ctx.save();
+          ctx.globalAlpha = 0.7;
+          drawShip(G.bot.ship, botLabel);
+          ctx.restore();
+        } else {
+          drawShip(G.bot.ship, botLabel);
+        }
+      }
     }
     drawFx();
 
@@ -2684,7 +3147,10 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     rafId = requestAnimationFrame(loop);
     var dt = Math.min(0.05, (ts - lastT) / 1000);
     lastT = ts;
-    if (G.state === "playing") updatePlay(dt);
+    if (G.state === "playing") {
+      if (G.mode === "couch") updateCouch(dt);
+      else updatePlay(dt);
+    }
     draw(ts);
   }
 
@@ -2696,6 +3162,23 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     return String(el.id).replace("screen-", "");
   }
 
+  // ---- couch key aliases: keyboard events arrive as e.g. "ArrowLeft"/"," — keys BELOW
+  // also record a lowercase alias so holds for couch seats (arrows, letters, J/L /,.) never miss.
+  function recordKey(keyName) {
+    Input.keys[keyName] = true;
+    if (keyName.length > 1) {
+      var a = keyName.toLowerCase();
+      if (a !== keyName) Input.keys[a] = true;
+    }
+  }
+  function clearKey(keyName) {
+    Input.keys[keyName] = false;
+    if (keyName.length > 1) {
+      var a = keyName.toLowerCase();
+      if (a !== keyName) Input.keys[a] = false;
+    }
+  }
+
   window.addEventListener("keydown", function (e) {
     var k = (e && e.key != null) ? String(e.key) : "";
     if (!k) return;
@@ -2704,7 +3187,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       e.preventDefault();
     }
     var keyName = k.length === 1 ? k.toLowerCase() : k;
-    Input.keys[keyName] = true;
+    recordKey(keyName);
     var swallow = (k.length === 1) && cheatSwallow(keyName);
     noteKey(k.length === 1 ? k : "");
 
@@ -2723,6 +3206,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       if (k === "2") location.hash = "#/endless";
       if (k === "3") location.hash = "#/multiplayer";
       if (k === "o" || k === "O") location.hash = "#/online";
+      if (k === "l" || k === "L") location.hash = "#/lan";
       if (k === "4" && prog.nullUnlocked) location.hash = "#/null";
       if (k === "5") location.hash = "#/daily";
     }
@@ -2733,13 +3217,17 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       if (k === "r" || k === "R") startBot("elite");
       if (k === "t" || k === "T") startBot("hell");
       if (k === "o" || k === "O") location.hash = "#/online";
+      if (k === "l" || k === "L") location.hash = "#/lan";
     }
   });
 
   window.addEventListener("keyup", function (e) {
     var keyName = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    Input.keys[keyName] = false;
+    clearKey(keyName);
   });
+  // Losing focus (tab switch / alt-tab) used to leave keys stuck ON: clear all on blur
+  // so no ship drifts after returning, and couch seats never inherit a phantom hold.
+  window.addEventListener("blur", function () { Input.keys = {}; });
 
   function pointerPos(e) {
     var rect = canvas.getBoundingClientRect();
@@ -2824,14 +3312,16 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     if (act === "start") beginPlay();
     else if (act === "resume") togglePause(false);
     else if (act === "home") goHome();
+    else if (act === "lan") { hideOverlay(); if (location.hash !== "#/lan") location.hash = "#/lan"; }
     else if (act === "lobby") goLobby();
-    else if (act === "rematch") NetRival.rematch();
+    else if (act === "rematch") NET.rematch();
     else if (act === "restart" || act === "retry") {
       hideOverlay();
       var mode = G.mode;
       var opts = { difficulty: G.difficulty };
       if (mode === "classic" && G.sector) opts.sector = G.sector.id;
       if (G.daily) opts.daily = G.daily;
+      if (mode === "couch" && G.couch) opts.couch = { count: G.couch.count };
       startMode(mode, opts);
     } else if (act === "next") {
       hideOverlay();
@@ -2906,12 +3396,141 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   $("#btnRoom").addEventListener("click", function () { NetRival.create(); });
   var rj = $("#btnRoomJoin");
   if (rj) rj.addEventListener("click", function () { NetRival.join(); });
+  // ---- staging room controls (2-8 player) ----
+  var sizeBox = $("#roomSize");
+  if (sizeBox) sizeBox.addEventListener("click", function (e) {
+    var chip = e.target.closest ? e.target.closest(".rs-chip") : null;
+    if (!chip) return;
+    $$(".rs-chip").forEach(function (c) { c.classList.remove("on"); });
+    chip.classList.add("on");
+    Sfx.click();
+  });
+  var rready = $("#btnRoomReady");
+  if (rready) rready.addEventListener("click", function () {
+    if (!NetRival.room || !CLOUD.on) return;
+    var next = !NetRival.room.ready;
+    NetRival.room.ready = next;
+    NetRival._rpc("set_ready", { p_code: NetRival.room.code, p_ready: next })
+      .then(function () { NetRival.renderRoster(); })
+      .catch(function () {});
+    Sfx.click();
+  });
+  var rstart = $("#btnRoomStart");
+  if (rstart) rstart.addEventListener("click", function () {
+    if (!NetRival.room || NetRival.room.side !== "host") return;
+    NetRival._rpc("start_race", { p_code: NetRival.room.code })
+      .then(function (row) {
+        if (!row || !row.code) throw new Error("START FAILED");
+        NetRival.countdownEnd = row.starts_at || 0;
+        NetRival.showCountdown();
+      })
+      .catch(function (e) { NetRival.status("START FAILED — " + String((e && e.message) || e).toUpperCase()); });
+  });
+  var rleave = $("#btnRoomLeave");
+  if (rleave) rleave.addEventListener("click", function () {
+    NetRival.leave();
+    NetRival.status("LEFT THE ROOM.", false);
+    Sfx.click();
+  });
+  var csend = $("#btnRoomChatSend");
+  if (csend) csend.addEventListener("click", function () { NetRival.chatSend(); });
+  var cinp = $("#roomChatInput");
+  if (cinp) cinp.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); NetRival.chatSend(); }
+  });
   var onlineBack = $("#btnOnlineBack");
   if (onlineBack) onlineBack.addEventListener("click", function () {
     Sfx.blip();
+    NetRival.leave();
     goHome();
   });
 
+  // ---- LAN party wiring (no internet: couch + WebRTC device link) ----
+  function copyText(el) {
+    if (!el) return;
+    var v = el.value || "";
+    if (!v) { if (typeof LanNet !== "undefined") LanNet.status("NOTHING TO COPY YET."); return; }
+    try {
+      el.select(); el.setSelectionRange(0, v.length);
+      if (document.execCommand && document.execCommand("copy")) { Sfx.blip(); return; }
+    } catch (e) {}
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(v).then(function () { Sfx.blip(); }).catch(function () {});
+    }
+  }
+  var lanBack = $("#btnLanBack");
+  if (lanBack) lanBack.addEventListener("click", function () {
+    Sfx.blip();
+    LanNet.leave();
+    Couch.leave();
+    goHome();
+  });
+  $$("#lanTabs .ghost-btn").forEach(function (t) {
+    t.addEventListener("click", function () {
+      $$("#lanTabs .ghost-btn").forEach(function (x) { x.classList.remove("on"); });
+      t.classList.add("on");
+      var which = t.getAttribute("data-lantab");
+      var cp = $("#lanCouch"), lp = $("#lanLink");
+      if (which === "couch") { cp.hidden = false; lp.hidden = true; }
+      else { cp.hidden = true; lp.hidden = false; }
+      Sfx.click();
+    });
+  });
+  $$("#couchSize .rs-chip").forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      $$("#couchSize .rs-chip").forEach(function (c) { c.classList.remove("on"); });
+      chip.classList.add("on");
+      Sfx.click();
+    });
+  });
+  var couchStart = $("#btnCouchStart");
+  if (couchStart) couchStart.addEventListener("click", function () {
+    var chip = document.querySelector("#couchSize .rs-chip.on");
+    var n = chip ? (parseInt(chip.getAttribute("data-count"), 10) || 2) : 2;
+    LanNet.leave();
+    showScreen("game");
+    Couch.start(Math.max(2, Math.min(4, n)));
+  });
+  $$("#lanSize .rs-chip").forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      $$("#lanSize .rs-chip").forEach(function (c) { c.classList.remove("on"); });
+      chip.classList.add("on");
+      Sfx.click();
+    });
+  });
+  var lanHost = $("#btnLanHost");
+  if (lanHost) lanHost.addEventListener("click", function () {
+    var chip = document.querySelector("#lanSize .rs-chip.on");
+    var n = chip ? (parseInt(chip.getAttribute("data-count"), 10) || 2) : 2;
+    LanNet.host(Math.max(2, Math.min(8, n)));
+  });
+  var lanJoin = $("#btnLanJoin");
+  if (lanJoin) lanJoin.addEventListener("click", function () {
+    Couch.leave();
+    LanNet.join();
+  });
+  var lanReady = $("#btnLanReady");
+  if (lanReady) lanReady.addEventListener("click", function () { LanNet.toggleReady(); Sfx.click(); });
+  // Guest-READY: the joiner pane has its own READY UP button (btnLanReadyGuest).
+  var lanReadyG = $("#btnLanReadyGuest");
+  if (lanReadyG) lanReadyG.addEventListener("click", function () { LanNet.toggleReady(); Sfx.click(); });
+  var lanStartBtn = $("#btnLanStart");
+  if (lanStartBtn) lanStartBtn.addEventListener("click", function () { LanNet.startRace(); });
+  // host invite/answer flow
+  var lanNewInv = $("#btnLanNewInvite");
+  if (lanNewInv) lanNewInv.addEventListener("click", function () { LanNet.newInvite(); Sfx.click(); });
+  var lanCopyOffer = $("#btnLanCopyOffer");
+  if (lanCopyOffer) lanCopyOffer.addEventListener("click", function () { copyText($("#lanOfferOut")); Sfx.click(); });
+  var lanAccept = $("#btnLanAccept");
+  if (lanAccept) lanAccept.addEventListener("click", function () { LanNet.acceptAnswer(); Sfx.click(); });
+  // joiner flow
+  var lanReply = $("#btnLanMakeReply");
+  if (lanReply) lanReply.addEventListener("click", function () { LanNet.makeReply(); Sfx.click(); });
+  var lanCopyAnswer = $("#btnLanCopyAnswer");
+  if (lanCopyAnswer) lanCopyAnswer.addEventListener("click", function () { copyText($("#lanAnswerOut")); Sfx.click(); });
+  var lanLeave = $("#btnLanLeave"), lanLeaveGuest = $("#btnLanLeaveGuest");
+  if (lanLeave) lanLeave.addEventListener("click", function () { LanNet.leave(); Sfx.click(); });
+  if (lanLeaveGuest) lanLeaveGuest.addEventListener("click", function () { LanNet.leave(); Sfx.click(); });
 
   var howto = $("#howto");
   $("#btnHowto").addEventListener("click", function () { howto.hidden = false; });
@@ -2923,6 +3542,12 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
   fitCanvas();
   refreshHome();
   attractStart();   // ambient gameplay behind the home hub
+  // LAN offline chip: show READY · OFFLINE OK vs OFFLINE READY, live on change.
+  if (typeof LanNet !== "undefined" && LanNet.refreshOfflineChip) {
+    LanNet.refreshOfflineChip();
+    window.addEventListener("online", LanNet.refreshOfflineChip);
+    window.addEventListener("offline", LanNet.refreshOfflineChip);
+  }
 
   // ================= Phase 3: home attract-mode =================
   // Bot-only demo on #homeBg: a ghost ship dodging falling blocks. Fully
@@ -3139,12 +3764,14 @@ var LB = {
     var cloud = (this._cloud && mode) ? this._cloud[mode] : null;
     if (cloud && cloud.length) rows = rows.concat(cloud);
     rows.sort(function (a, b) { return b.score - a.score || a.at - b.at; });
-    var seen = {}, out = [];
+    // BEST-ONLY: one row per pilot (highest score). If you are 1st, only your
+    // top run shows — no repeats of the same player further down the board.
+    var bestBy = {}, out = [];
     for (var i = 0; i < rows.length; i++) {
       var rr = rows[i];
-      var key = rr.mode + "|" + rr.name + "|" + rr.score + "|" + rr.at;
-      if (seen[key]) continue;
-      seen[key] = 1;
+      var key = String(rr.name || "").toLowerCase();
+      if (bestBy[key]) continue;
+      bestBy[key] = 1;
       out.push(rr);
       if (out.length >= n) break;
     }
@@ -3170,6 +3797,18 @@ function submitRun(won) {
     won: won,
     rank: (G.mode === "classic" && won) ? computeRank() : ""
   });
+  // COINS: earn-only for now. Cheat/tutorial ghost runs never earn.
+  if (!G.ghostScore && !activeCheat) {
+    var earn = Math.floor(G.score / 100) + (G.graze | 0) * 2;
+    if (won) earn += 150;
+    if (G.daily) earn += 100;
+    if (earn > 0) {
+      Coins.add(earn);
+      addPopup(player ? player.x + player.w / 2 : 480,
+               player ? player.y - 14 : 260,
+               "+" + earn + " COINS", "#ffd75d");
+    }
+  }
 }
 
 var lbMode = "endless";
@@ -3226,6 +3865,7 @@ function openBoard() {
   refreshCloudBoard();
   $("#modalBoard").hidden = false;
   syncAuthUI();
+  if (Auth.superior() && typeof Feedback !== "undefined") Feedback.inbox();
 }
 function closeBoard() { $("#modalBoard").hidden = true; }
 
@@ -3289,7 +3929,9 @@ var Passport = {
       botWins: per,
       tutorial: !!Store.get(K.tutorial, {}).done,
       lb: LB._all(),
-      dailyBest: Store.get(K.dailyBest, {})
+      dailyBest: Store.get(K.dailyBest, {}),
+      coins: Coins.get(),
+      owned: Coins.owned()
     };
   },
   encode: function (payload) {
@@ -3315,7 +3957,7 @@ var Passport = {
   },
   // ---- merge imported payload into local state (best-of wins, identity taken) ----
   merge: function (p) {
-    var summary = { ranks: 0, sectors: 0, scores: 0, botWins: 0, scoresLB: 0 };
+    var summary = { ranks: 0, sectors: 0, scores: 0, botWins: 0, scoresLB: 0, coins: 0, owned: 0 };
     // identity: callsign/title come from the passport; local avatar kept
     pilot.name = String(p.pilot.name || "LUMEN").replace(/[^A-Za-z0-9 _-]/g, "").slice(0, 14) || "LUMEN";
     pilot.title = String(p.pilot.title || "PIONEER").slice(0, 14);
@@ -3389,6 +4031,18 @@ var Passport = {
       }
       if (dbc) Store.set(K.dailyBest, dbp);
     }
+    // coins: take the higher balance (no server authority; single-pilot wallet)
+    if (typeof p.coins === "number" && p.coins > Coins.get()) {
+      summary.coins = (p.coins | 0) - Coins.get();
+      Store.set(K.coins, p.coins | 0);
+    }
+    // owned shop items: union — importing never removes a purchase
+    if (Array.isArray(p.owned)) {
+      var before = Coins.owned().length;
+      p.owned.forEach(function (id) { if (typeof id === "string") Coins.grant(id); });
+      summary.owned = Math.max(0, Coins.owned().length - before);
+    }
+    if (summary.coins || summary.owned) Coins.render();
     saveProgress();
     savePilot();
     return summary;
@@ -3435,6 +4089,8 @@ function passportImport() {
   if (s.scores) bits.push(s.scores + " BEST" + (s.scores === 1 ? "" : "S"));
   if (s.botWins) bits.push(s.botWins + " BOT WINS");
   if (s.scoresLB) bits.push(s.scoresLB + " BOARD ENTRIES");
+  if (s.coins) bits.push("+" + lbFmt(s.coins) + " COINS");
+  if (s.owned) bits.push(s.owned + " SKIN" + (s.owned === 1 ? "" : "S"));
   if (status) status.textContent = "PASSPORT MERGED: " + (bits.length ? bits.join(" + ") : "NOTHING NEW — YOU WERE AHEAD.");
   if (box) box.value = "";
   Sfx.win();
@@ -3641,6 +4297,7 @@ function syncAuthUI() {
     var bd = $("#btnAuthOut"); if (bd) bd.hidden = !Auth.ok();
     var bg = $("#superBadge"); if (bg) bg.hidden = !Auth.superior();
     var sb = $("#superBox"); if (sb) sb.hidden = !Auth.superior();
+    var ib = $("#inboxBox"); if (ib) ib.hidden = !Auth.superior();
     var d1 = $("#btnDevPickup"); if (d1) d1.hidden = !Auth.superior();
     var d2 = $("#btnDevScore"); if (d2) d2.hidden = !Auth.superior();
     // Phase 4 (E2): bottom bar is a signed-in status chip — hidden for guests
@@ -3673,12 +4330,25 @@ LB.remote = {
   },
   top: function (mode, n) {   // async: resolves rows, rejects -> caller keeps local
     if (!CLOUD.on) return Promise.reject(new Error("cloud off"));
-    var q = "select=id,mode,name,title,score,time,rank,won,date,at&order=score.desc,at.asc&limit=" + (n || 10);
+    // fetch more than we show, then collapse to best-per-pilot client-side
+    var q = "select=id,mode,name,title,score,time,rank,won,date,at&order=score.desc,at.asc&limit=" + (Math.max(50, (n || 10) * 5));
     if (mode) q += "&mode=eq." + encodeURIComponent(mode);
     return fetch(CLOUD.url + "/rest/v1/runs?" + q, { headers: Auth.hdrs() }).then(function (r) {
       if (!r.ok) throw new Error("http " + r.status);
       return r.json();
-    }).then(function (rows) { return Array.isArray(rows) ? rows : []; });
+    }).then(function (rows) {
+      if (!Array.isArray(rows)) return [];
+      var bestBy = {}, out = [];
+      for (var i = 0; i < rows.length; i++) {
+        var rr = rows[i];
+        var key = String(rr.name || "").toLowerCase();
+        if (bestBy[key]) continue;
+        bestBy[key] = 1;
+        out.push(rr);
+        if (out.length >= (n || 10)) break;
+      }
+      return out;
+    });
   }
 };
 
@@ -3693,18 +4363,36 @@ function refreshCloudBoard() {
   }).catch(function () { LB.cloudOK = false; renderBoard(); });
 }
 
-// ================= online rooms (ghost race over polled REST) =================
-// No SDK / no Realtime toggle: each side owns a column namespace in one `rooms`
-// row and reads the opponent at ~10Hz. The storm is DETERMINISTIC — both clients
-// share `seed`, so makeRng() spawns an identical hazard schedule on both
-// machines. Only x / alive / seen / elapsed cross the wire; collisions stay
+// ================= online rooms (2-8 pilot roster, ghost race over polled REST) ==
+// No SDK / no Realtime: rooms + room_members tables polled over REST. Staging
+// first (roster + READY + host START), then a shared starts_at countdown fires
+// the race for everyone at once. Storm is DETERMINISTIC — all clients share the
+// room `seed`, so makeRng() spawns an identical hazard schedule on every
+// machine. Only x / alive / seen / elapsed cross the wire; collisions stay
 // local, so there is no host advantage and no lag disputes.
+// Ship colours: auto-assigned distinct palette per seat on join.
 var NetRival = {
-  room: null,        // { code, seed, side, rival, myCs }
+  room: null,        // { code, seed, side, max, status, startsAt, myUid, myCs, ready }
+  roster: [],        // [{ uid, callsign, color, slot, ready, x, alive, elapsed, seen, leftAt, isMe, isHost }]
   poll: null,
   pushT: 0,
+  chatT: 0,
+  chatLastId: 0,
+  countdownEnd: 0,   // epoch ms when the 3-2-1-GO countdown finishes
+  racing: false,
   CODE: "ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
-
+  // 8 distinct paints; auto-assign first free colour per seat. Friends CAN still
+  // pick the same custom paint in Hangar — this palette is only the default.
+  PALETTE: [
+    { paint: "cyan",    hex: "#00f0ff" },
+    { paint: "magenta", hex: "#ff2bd6" },
+    { paint: "lime",    hex: "#5dff9a" },
+    { paint: "amber",   hex: "#ffb454" },
+    { paint: "violet",  hex: "#b18cff" },
+    { paint: "rose",    hex: "#ff5d8a" },
+    { paint: "ice",     hex: "#eaf6ff" },
+    { paint: "slate",   hex: "#8d9bff" }
+  ],
   _code: function () {
     var s = "";
     for (var i = 0; i < 6; i++) s += this.CODE[(Math.random() * this.CODE.length) | 0];
@@ -3733,49 +4421,85 @@ var NetRival = {
       if (a) a.disabled = busy; if (b) b.disabled = busy;
     }
   },
-  renderPresence: function (hostCs, guestCs) {
-    var box = $("#roomPresence");
-    if (!box) return;
-    box.hidden = false;
-    var me = String(Auth.callsign() || "").toLowerCase();
-    var h = String(hostCs || "");
-    var g = String(guestCs || "");
-    var hs = $("#seatHost"), gs = $("#seatGuest");
-    if (hs) {
-      hs.textContent = h ? h.slice(0, 14).toUpperCase() + (h.toLowerCase() === me ? " (YOU)" : "") : "WAITING…";
-      hs.classList.toggle("full", !!h);
-    }
-    if (gs) {
-      gs.textContent = g ? g.slice(0, 14).toUpperCase() + (g.toLowerCase() === me ? " (YOU)" : "") : "WAITING…";
-      gs.classList.toggle("full", !!g);
-    }
+  showStaging: function () {
+    var s = $("#roomStaging"); if (s) s.hidden = false;
+    var c = $("#roomChat"); if (c) c.hidden = false;
   },
-  hidePresence: function () {
-    var box = $("#roomPresence");
-    if (box) box.hidden = true;
+  hideStaging: function () {
+    var s = $("#roomStaging"); if (s) s.hidden = true;
+    var c = $("#roomChat"); if (c) c.hidden = true;
+  },
+  // Render the 8-seat roster grid: filled seats show callsign + colour + ready
+  // dot; empty seats stay dashed. Host gets a ★, you get YOU.
+  renderRoster: function () {
+    var box = $("#roomRoster");
+    if (!box || !this.room) return;
+    var max = this.room.max || 2;
+    var myUid = this.room.myUid;
+    var hostUid = null;
+    for (var i = 0; i < this.roster.length; i++) if (this.roster[i].isHost) hostUid = this.roster[i].uid;
+    var html = "";
+    for (var slot = 0; slot < max; slot++) {
+      var m = null;
+      for (var j = 0; j < this.roster.length; j++) if (this.roster[j].slot === slot && !this.roster[j].leftAt) { m = this.roster[j]; break; }
+      if (!m) {
+        html += "<div class='roster-seat empty'>SLOT " + (slot + 1) + " · OPEN</div>";
+        continue;
+      }
+      var isMe = m.uid === myUid;
+      var isHost = m.uid === hostUid;
+      html += "<div class='roster-seat" + (isMe ? " me" : "") + "'>" +
+        "<span class='roster-dot' style='background:" + (m.color || "#00f0ff") + "'></span>" +
+        "<span class='roster-cs'>" + (isHost ? "★ " : "") + String(m.callsign || "PILOT").slice(0, 12).toUpperCase() + (isMe ? " (YOU)" : "") + "</span>" +
+        (m.ready ? "<span class='roster-ready'>✓</span>" : "<span class='roster-wait'>…</span>") +
+        "</div>";
+    }
+    box.innerHTML = html;
+    // host sees START once >= 2 are present
+    var startBtn = $("#btnRoomStart");
+    if (startBtn) {
+      var present = 0;
+      for (var k = 0; k < this.roster.length; k++) if (!this.roster[k].leftAt) present++;
+      startBtn.hidden = !(this.room.side === "host" && present >= 2 && this.room.status === "waiting");
+    }
+    var readyBtn = $("#btnRoomReady");
+    if (readyBtn) readyBtn.textContent = this.room.ready ? "UNREADY" : "READY UP";
   },
 
   create: function () {
     var self = this;
-    if (!gateMode("ONLINE DUEL", null)) return;
+    if (!gateMode("ONLINE ROOM", null)) return;
     if (!CLOUD.on) { this.status("CLOUD OFFLINE — ONLINE UNAVAILABLE."); return; }
+    // host picks 2-8 from the size chips
+    var max = 2;
+    var chip = document.querySelector(".rs-chip.on");
+    if (chip) max = parseInt(chip.getAttribute("data-size"), 10) || 2;
+    max = Math.max(2, Math.min(8, max));
     var code = this._code();
     this.status("OPENING ROOM " + code + " …", true);
-    this._rpc("create_room", { p_code: code, p_seed: (Math.random() * 2147483647) >>> 0 })
+    this._rpc("create_room", { p_code: code, p_seed: (Math.random() * 2147483647) >>> 0, p_max: max })
       .then(function (row) {
         if (!row || !row.code) { self.status("COULD NOT OPEN ROOM — TRY AGAIN."); return; }
         var rc = $("#roomCode"); if (rc) rc.value = code;
-        self.room = { code: code, seed: row.seed, side: "host", rival: "", myCs: Auth.callsign() || "HOST" };
-        self.status("ROOM " + code + " OPEN — WAITING FOR RIVAL …", false);
-        self.renderPresence(self.room.myCs, "");
+        self.room = {
+          code: code, seed: row.seed >>> 0, side: "host", max: row.max_players || max,
+          status: row.status || "waiting", startsAt: row.starts_at || 0,
+          myUid: Auth.uid(), myCs: Auth.callsign() || "HOST", ready: false
+        };
+        var cbig = $("#roomCodeBig"); if (cbig) cbig.textContent = code;
+        self.status("ROOM " + code + " OPEN — SHARE THE CODE.", false);
+        self.showStaging();
+        self.roster = [];
+        self.renderRoster();
         self.startPoll();
+        self.startChatPoll();
       })
       .catch(function (e) { self.status("CREATE FAILED — " + String((e && e.message) || e).toUpperCase()); });
   },
 
   join: function () {
     var self = this;
-    if (!gateMode("ONLINE DUEL", null)) return;
+    if (!gateMode("ONLINE ROOM", null)) return;
     if (!CLOUD.on) { this.status("CLOUD OFFLINE — ONLINE UNAVAILABLE."); return; }
     var rc = $("#roomCode");
     var code = String((rc && rc.value) || "").trim().toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, "");
@@ -3784,78 +4508,163 @@ var NetRival = {
     this._rpc("join_room", { p_code: code })
       .then(function (row) {
         if (!row || !row.code) throw new Error("NOT FOUND");
-        self.room = { code: code, seed: row.seed, side: "guest", rival: row.host_cs || "RIVAL", myCs: Auth.callsign() || "GUEST" };
-        self.renderPresence(row.host_cs, self.room.myCs);
-        return self._rest("rooms?code=eq." + encodeURIComponent(code), {
-          method: "PATCH", body: JSON.stringify({ status: "racing" })
-        }).then(function () {
-          self.beginRace(row.seed, "guest", self.room.rival);
-        });
+        self.room = {
+          code: code, seed: row.seed >>> 0, side: "guest", max: row.max_players || 2,
+          status: row.status || "waiting", startsAt: row.starts_at || 0,
+          myUid: Auth.uid(), myCs: Auth.callsign() || "GUEST", ready: false
+        };
+        var cbig = $("#roomCodeBig"); if (cbig) cbig.textContent = code;
+        self.status("JOINED ROOM " + code + " — WAITING IN STAGING.", false);
+        self.showStaging();
+        self.roster = [];
+        self.renderRoster();
+        self.startPoll();
+        self.startChatPoll();
       })
       .catch(function (e) {
         var m = String((e && e.message) || e).toUpperCase();
-        self.status((m.indexOf("FULL") >= 0 || m.indexOf("NOT FOUND") >= 0) ? "ROOM FULL OR NOT FOUND." : "JOIN FAILED — CHECK THE CODE.");
+        self.status(m.indexOf("FULL") >= 0 ? "ROOM FULL." :
+                    m.indexOf("STARTED") >= 0 ? "RACE ALREADY STARTED." :
+                    m.indexOf("NOT FOUND") >= 0 ? "ROOM NOT FOUND." : "JOIN FAILED — CHECK THE CODE.");
       });
   },
 
   startPoll: function () {
     var self = this;
     this.stopPoll();
-    this.poll = setInterval(function () { self.tick(); }, 100);
+    // staging = slow roster poll (1.2s). Once racing, a faster poll keeps ghosts fresh.
+    this.poll = setInterval(function () { self.tick(); }, this.racing ? 150 : 1200);
   },
   stopPoll: function () { if (this.poll) { clearInterval(this.poll); this.poll = null; } },
+  startChatPoll: function () {
+    var self = this;
+    if (this.chatPoll) clearInterval(this.chatPoll);
+    this.chatPoll = setInterval(function () { self.chatTick(); }, 2000);
+    this.chatTick();
+  },
+  stopChatPoll: function () { if (this.chatPoll) { clearInterval(this.chatPoll); this.chatPoll = null; } },
 
   tick: function () {
     var self = this;
     if (!this.room || !CLOUD.on) return;
     var code = encodeURIComponent(this.room.code);
-    this._rest("rooms?code=eq." + code + "&select=*")
-      .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
-      .then(function (rows) {
-        var row = rows && rows[0];
-        if (!row) { self.status("ROOM CLOSED."); self.stopPoll(); return; }
-        var host = self.room.side === "host";
-        // rematch: only meaningful DURING a live race — the opponent restarted
-        // with a fresh seed. Guard on G.bot.net so a fresh CREATE/JOIN never
-        // auto-launches on top of the waiting/lobby screen.
-        var inRace = G.bot && G.bot.net && G.state === "playing";
-        if (inRace && (row.seed >>> 0) !== (self.room.seed >>> 0)) {
-          self.room.seed = row.seed >>> 0;
-          self.room.rival = host ? (row.guest_cs || self.room.rival) : (row.host_cs || self.room.rival);
-          self.beginRace(row.seed >>> 0, self.room.side, self.room.rival);
-          return;
-        }
-        if (host && !G.bot) {
-          if (!row.guest_cs) {
-            self.status("ROOM " + self.room.code + " OPEN — WAITING FOR RIVAL …");
-            self.renderPresence(row.host_cs, "");
-            return;
-          }
-          self.status("RIVAL JOINED — GO!");
-          self.room.rival = row.guest_cs || "RIVAL";
-          self._rest("rooms?code=eq." + code, { method: "PATCH", body: JSON.stringify({ status: "racing" }) }).catch(function () {});
-          self.beginRace(row.seed, "host", self.room.rival);
-          return;
-        }
-        if (G.bot && G.bot.net && G.state === "playing") {
-          self.applyRival(host ? row.guest_x : row.host_x,
-                          host ? row.guest_alive : row.host_alive,
-                          host ? row.guest_seen : row.host_seen,
-                          host ? row.guest_elapsed : row.host_elapsed);
-        }
-      })
-      .catch(function () { /* transient — keep last known state */ });
+    // pull room + roster in one go
+    Promise.all([
+      this._rest("rooms?code=eq." + code + "&select=*").then(function (r) { return r.ok ? r.json() : null; }),
+      this._rest("room_members?room_code=eq." + code + "&select=*&order=slot.asc").then(function (r) { return r.ok ? r.json() : null; })
+    ]).then(function (res) {
+      var row = res[0] && res[0][0];
+      var mem = res[1] || [];
+      if (!row) { self.status("ROOM CLOSED."); self.stopPoll(); self.stopChatPoll(); return; }
+      self.room.seed = row.seed >>> 0;
+      self.room.status = row.status;
+      self.room.startsAt = row.starts_at || 0;
+      self.room.max = row.max_players || self.room.max;
+      self.syncRoster(mem, row);
+      self.ensureMyColor();
+      // countdown fired: host pressed START (status flipped to racing w/ starts_at)
+      if (row.status === "racing" && !self.racing) {
+        self.countdownEnd = (row.starts_at || 0);
+        self.showCountdown();
+      }
+      // rematch: fresh seed while a race is done -> new race
+      if (row.status === "racing" && self.racing && (row.seed >>> 0) !== (self.room.lastSeed) && self.countdownPassed()) {
+        self.room.seed = row.seed >>> 0;
+        self.beginRace(row.seed >>> 0);
+        return;
+      }
+      if (self.countdownPassed() && !self.racing && row.status === "racing") {
+        self.beginRace(row.seed >>> 0);
+        return;
+      }
+      if (self.racing && G.bot && G.bot.net && G.state === "playing") {
+        self.applyRosterGhosts(mem);
+      }
+      self.renderRoster();
+    }).catch(function () { /* transient — keep last known state */ });
+  },
+  countdownPassed: function () {
+    return !this.countdownEnd || Date.now() >= this.countdownEnd;
   },
 
-  applyRival: function (x, alive, seen, elapsed) {
+  syncRoster: function (mem, row) {
+    var myUid = this.room && this.room.myUid;
+    var hostId = row && row.host_id;
+    var out = [];
+    for (var i = 0; i < mem.length; i++) {
+      var m = mem[i];
+      out.push({
+        uid: m.user_id, callsign: m.callsign, color: m.color, paint: m.paint,
+        slot: m.slot | 0, ready: !!m.ready,
+        x: (typeof m.x === "number") ? m.x : 453,
+        alive: m.alive !== false, elapsed: m.elapsed || 0,
+        seen: m.seen || 0, leftAt: m.left_at || 0,
+        isMe: m.user_id === myUid, isHost: m.user_id === hostId
+      });
+    }
+    this.roster = out;
+  },
+  // Assign ME a distinct colour from the 8-palette the first time I'm in a room.
+  // Only writes if my row still has the default; friends CAN still override with
+  // a matching Hangar paint — the roster + YOU label keeps everyone identifiable.
+  ensureMyColor: function () {
+    if (!this.room || this._colorSent) return;
+    var myUid = this.room.myUid;
+    var my = null;
+    for (var i = 0; i < this.roster.length; i++) {
+      if (this.roster[i].uid === myUid) { my = this.roster[i]; break; }
+    }
+    if (!my) return;
+    var taken = {};
+    for (var j = 0; j < this.roster.length; j++) {
+      if (this.roster[j].uid !== myUid && this.roster[j].color) taken[this.roster[j].color] = 1;
+    }
+    var pick = this.PALETTE[0];
+    for (var p = 0; p < this.PALETTE.length; p++) {
+      if (!taken[this.PALETTE[p].hex]) { pick = this.PALETTE[p]; break; }
+    }
+    this._colorSent = true;
+    var self = this;
+    this._rest("room_members?room_code=eq." + encodeURIComponent(this.room.code) +
+      "&user_id=eq." + encodeURIComponent(myUid), {
+        method: "PATCH",
+        body: JSON.stringify({ color: pick.hex, paint: pick.paint })
+      }).then(function () {
+        my.color = pick.hex; my.paint = pick.paint;
+        self.renderRoster();
+      }).catch(function () {});
+  },
+  applyRosterGhosts: function (mem) {
     var b = G.bot;
     if (!b || !b.net) return;
-    if (typeof x === "number") b.remoteX = x;
-    if (typeof elapsed === "number") b.remoteElapsed = elapsed;
-    if (seen) b.lastSeen = seen;                 // only real pushes refresh the clock
-    if (b.rivalLeft) return;
-    var stale = b.lastSeen && (Date.now() - b.lastSeen) > 3000;
-    if (alive === false || stale) { b.rivalLeft = true; b.alive = false; }
+    var myUid = this.room.myUid;
+    var g = {};
+    for (var i = 0; i < mem.length; i++) {
+      var m = mem[i];
+      if (m.user_id === myUid) continue;
+      g[m.user_id] = { x: m.x, alive: m.alive, elapsed: m.elapsed, seen: m.seen, leftAt: m.left_at };
+    }
+    b.ghosts = b.ghosts || [];
+    for (var k = 0; k < b.ghosts.length; k++) {
+      var gh = b.ghosts[k];
+      var src = g[gh.uid];
+      if (!src) { gh.rivalLeft = true; gh.alive = false; continue; }
+      if (typeof src.x === "number") gh.remoteX = src.x;
+      if (typeof src.elapsed === "number") gh.remoteElapsed = src.elapsed;
+      if (src.seen) gh.lastSeen = src.seen;
+      var stale = gh.lastSeen && (Date.now() - gh.lastSeen) > 3000;
+      if (src.leftAt || src.alive === false || stale) { gh.rivalLeft = true; gh.alive = false; }
+    }
+  },
+  showCountdown: function () {
+    var self = this;
+    if (this._cdTimer) clearInterval(this._cdTimer);
+    this._cdTimer = setInterval(function () {
+      if (!self.countdownEnd) { clearInterval(self._cdTimer); return; }
+      var left = Math.ceil((self.countdownEnd - Date.now()) / 1000);
+      if (left > 0) showBanner(String(left), 1);
+      else { clearInterval(self._cdTimer); }
+    }, 300);
   },
 
   push: function (x, alive, elapsed, force) {
@@ -3863,31 +4672,37 @@ var NetRival = {
     var now = performance.now();
     if (!force && now - this.pushT < 100) return;   // ~10Hz cap
     this.pushT = now;
-    var host = this.room.side === "host";
-    var patch = host
-      ? { host_x: x, host_alive: alive, host_elapsed: elapsed, host_seen: Date.now() }
-      : { guest_x: x, guest_alive: alive, guest_elapsed: elapsed, guest_seen: Date.now() };
-    this._rest("rooms?code=eq." + encodeURIComponent(this.room.code), { method: "PATCH", body: JSON.stringify(patch) })
+    this._rpc("push_state", { p_code: this.room.code, p_x: x, p_alive: !!alive, p_elapsed: elapsed || 0 })
       .catch(function () {});
   },
 
-  beginRace: function (seed, side, rival) {
-    this.hidePresence();
+  beginRace: function (seed) {
+    this.racing = true;
+    this.hideStaging();
     this.startPoll();
     Sfx.blip();
-    startMode("multiplayer", { seed: seed >>> 0, net: true, rival: rival || "RIVAL", side: side });
+    var ghosts = [];
+    for (var i = 0; i < this.roster.length; i++) {
+      var m = this.roster[i];
+      if (m.isMe || m.leftAt) continue;
+      ghosts.push({
+        uid: m.uid, callsign: m.callsign, color: m.color || "#7cf6ff",
+        remoteX: 700, remoteElapsed: 0, lastSeen: Date.now(),
+        alive: true, rivalLeft: false, ghost: true
+      });
+    }
+    var rival = ghosts.length ? (ghosts[0].callsign || "RIVAL") : "RIVAL";
+    this.room.seed = seed >>> 0;
+    this.room.lastSeed = seed >>> 0;
+    startMode("multiplayer", { seed: seed >>> 0, net: true, rival: rival, side: this.room.side, ghosts: ghosts });
   },
 
   finish: function (won) {
+    this.racing = false;
     if (this.room && CLOUD.on) {
-      var code = encodeURIComponent(this.room.code);
-      this._rest("rooms?code=eq." + code, {
-        method: "PATCH",
-        body: JSON.stringify({ status: "done", winner: won ? (this.room.myCs || "") : (this.room.rival || "") })
-      }).catch(function () {});
+      if (won) this._rpc("finish_round", { p_code: this.room.code, p_winner: this.room.myUid }).catch(function () {});
+      this.status(won ? "YOU TOOK THE ROUND — REMATCH?" : "ROUND OVER.", false);
     }
-    // NOTE: do NOT stopPoll here — keep listening so the opponent's REMATCH
-    // (a changed seed) is detected and both sides drop into the new race.
   },
   rematch: function () {
     var self = this;
@@ -3897,12 +4712,456 @@ var NetRival = {
       .then(function (row) {
         if (!row || !row.code) throw new Error("REMATCH FAILED");
         self.room.seed = row.seed >>> 0;
-        self.room.rival = (self.room.side === "host") ? (row.guest_cs || self.room.rival) : (row.host_cs || self.room.rival);
-        self.beginRace(row.seed >>> 0, self.room.side, self.room.rival);
+        self.countdownEnd = row.starts_at || 0;
+        self.showCountdown();
       })
       .catch(function () { self.status("REMATCH FAILED — TRY AGAIN."); });
   },
-  leave: function () { this.stopPoll(); this.room = null; this.hidePresence(); }
+  leave: function () {
+    if (this.room && CLOUD.on) {
+      this._rpc("mark_left", { p_code: this.room.code }).catch(function () {});
+    }
+    this.stopPoll();
+    this.stopChatPoll();
+    if (this._cdTimer) clearInterval(this._cdTimer);
+    this.room = null;
+    this.roster = [];
+    this.racing = false;
+    this.countdownEnd = 0;
+    this.chatLastId = 0;
+    this.hideStaging();
+  },
+
+  // ---- room chat (login-only, 140 chars, 1 msg / 1.5s) ----
+  chatSend: function () {
+    var inp = $("#roomChatInput");
+    if (!inp || !this.room || !CLOUD.on) return;
+    var msg = String(inp.value || "").trim().slice(0, 140);
+    if (!msg) return;
+    var now = Date.now();
+    if (now - this.chatSendT < 1500) { this.status("SLOW DOWN — 1 MSG / 1.5S."); return; }
+    this.chatSendT = now;
+    this._rest("room_chats", {
+      method: "POST",
+      headers: { "Prefer": "return=minimal" },
+      body: JSON.stringify([{ room_code: this.room.code, user_id: this.room.myUid, msg: msg }])
+    }).then(function () { inp.value = ""; }).catch(function () {});
+  },
+  chatTick: function () {
+    var self = this;
+    if (!this.room || !CLOUD.on) return;
+    var q = "room_chats?room_code=eq." + encodeURIComponent(this.room.code) +
+            "&select=id,callsign,msg,at&order=at.asc&limit=60";
+    this._rest(q).then(function (r) { return r.ok ? r.json() : null; }).then(function (rows) {
+      if (!rows || !rows.length) return;
+      var log = $("#roomChatLog");
+      if (!log) return;
+      var last = rows[rows.length - 1];
+      if (last.id === self.chatLastId) return;
+      self.chatLastId = last.id;
+      var me = String(self.room.myCs || "").toLowerCase();
+      log.innerHTML = rows.map(function (c) {
+        var mine = String(c.callsign || "").toLowerCase() === me;
+        return "<div class='chat-line" + (mine ? " me" : "") + "'><b>" +
+          String(c.callsign || "?").slice(0, 12).toUpperCase() + ":</b> " +
+          String(c.msg || "").slice(0, 140) + "</div>";
+      }).join("");
+      log.scrollTop = log.scrollHeight;
+    }).catch(function () {});
+  }
+};
+
+
+
+// ================= LAN PARTY — WebRTC device link (no internet) =================
+// Host taps HOST ROOM and makes one invite per friend (offer SDP as text).
+// Friend pastes it, taps MAKE REPLY (answer SDP), sends that back; host taps
+// CONNECT. Both land on an RTCDataChannel — no server, no STUN needed on a
+// LAN/hotspot. Host is authoritative for seed + start; everyone runs the same
+// shared-storm ghost race as online (collisions stay local — no host advantage).
+var LanNet = {
+  side: null, max: 2, code: "", seed: 0,
+  myName: (Auth.ok() && Auth.callsign()) || (pilot && pilot.name) || "PILOT",
+  ready: false, racing: false,
+  peers: {}, hostPc: null, hostDc: null, hostName: "PILOT",
+  PALETTE: [
+    { hex: "#00f0ff" }, { hex: "#ff2bd6" }, { hex: "#ffd75d" }, { hex: "#5dff9a" },
+    { hex: "#b18cff" }, { hex: "#ff5d8a" }, { hex: "#eaf6ff" }, { hex: "#8d9bff" }
+  ],
+  _peerN: 0, _cdTimer: null, _pushT: 0, _hostSlot: 0, _mySlot: 0, _leave: false,
+
+  status: function (msg) {
+    var el = document.getElementById("lanLinkStatus");
+    if (el) el.textContent = msg;
+  },
+  // Reflect the offline chip on the home card (ONLINE READY vs OFFLINE READY).
+  refreshOfflineChip: function () {
+    var el = document.getElementById("offlineChip");
+    if (!el) return;
+    var on = (typeof navigator !== "undefined") ? !!navigator.onLine : true;
+    el.textContent = on ? "READY · OFFLINE OK" : "OFFLINE READY";
+  },
+  _cfg: function () {
+    // True-offline LAN: host candidates only (192.168.x.x / 10.x) — no STUN
+    // needed on the same subnet. When the device reports online we add one
+    // public STUN as best-effort fallback for tricky routers; offline we use
+    // an empty list so gathering never waits on the internet.
+    var on = (typeof navigator !== "undefined") ? !!navigator.onLine : true;
+    if (on) return { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+    return { iceServers: [] };
+  },
+  colorForSlot: function (slot) { return (this.PALETTE[(slot | 0) % 8] || this.PALETTE[0]).hex; },
+  toggleReady: function () {
+    this.ready = !this.ready;
+    var lbl = this.ready ? "UNREADY" : "READY UP";
+    var b = document.getElementById("btnLanReady");
+    if (b) b.textContent = lbl;
+    var bg = document.getElementById("btnLanReadyGuest");
+    if (bg) bg.textContent = lbl;
+    this._relay({ t: "ready", r: this.ready ? 1 : 0 });
+  },
+  startRace: function () { this.start(); },
+
+  // ---------------- HOST ----------------
+  host: function (max) {
+    var self = this;
+    if (typeof RTCPeerConnection === "undefined") { this.status("WEBRTC UNSUPPORTED ON THIS DEVICE."); return; }
+    this.leave();
+    this.side = "host"; this._hostSlot = 0; this._mySlot = 0;
+    this.myName = (Auth.ok() && Auth.callsign()) || (pilot && pilot.name) || "PILOT";
+    this.max = Math.max(2, Math.min(8, max || 2));
+    this.ready = false; this.racing = false;
+    this.code = this._code();
+    this.seed = (Math.random() * 2147483647) >>> 0;
+    this.showHost();
+    this.renderRoster();
+    this.status("ROOM OPEN · MAKE AN INVITE FOR A FRIEND (0/" + (this.max - 1) + " LINKED).");
+  },
+  newInvite: function () {
+    var self = this;
+    if (this._present() >= this.max) { this.status("ALL SLOTS LINKED — RAISE YOUR MAX OR START."); return; }
+    var pc = new RTCPeerConnection(this._cfg());
+    var dc = pc.createDataChannel("lan");
+    var id = "p" + (++this._peerN);
+    var slot = this._nextSlot();
+    var peer = { pc: pc, dc: dc, ready: false, name: "PILOT", alive: true, x: 480, elapsed: 0, seen: 0, slot: slot };
+    this.peers[id] = peer;
+    dc.onopen = function () {
+      self._send(dc, { t: "hi", code: self.code, seed: self.seed, max: self.max, slot: slot, name: self.myName });
+      self.renderRoster();
+      self.status("A FRIEND IS LINKED (" + self._present() + "/" + self.max + "). MAKE ANOTHER INVITE OR START.");
+    };
+    dc.onclose = function () { peer.alive = false; self.renderRoster(); };
+    dc.onmessage = function (e) { self._onMsg(id, peer, e); };
+    pc.onicecandidate = function (e) {
+      if (e.candidate) return;   // wait for gathering to finish
+      var out = document.getElementById("lanOfferOut");
+      if (out) out.value = JSON.stringify(pc.localDescription);
+      self.status("INVITE READY — COPY IT TO YOUR FRIEND.");
+    };
+    pc.createOffer().then(function (o) { return pc.setLocalDescription(o); })
+      .catch(function () { self.status("COULD NOT MAKE AN INVITE."); });
+  },
+  acceptAnswer: function () {
+    var self = this;
+    var ta = document.getElementById("lanAnswerIn");
+    var ans = ta ? String(ta.value || "").trim() : "";
+    if (!ans) { this.status("PASTE THEIR REPLY FIRST."); return; }
+    var peer = this._firstOpenless();
+    if (!peer) { this.status("ALL SLOTS LINKED — RAISE YOUR MAX FOR MORE."); return; }
+    var desc;
+    try { desc = JSON.parse(ans); } catch (e) { this.status("THAT REPLY LOOKS CORRUPTED."); return; }
+    peer.pc.setRemoteDescription(new RTCSessionDescription(desc))
+      .then(function () { if (ta) ta.value = ""; self.status("LINKING… your friend should connect shortly."); })
+      .catch(function () { self.status("COULD NOT LINK — RESEND THE REPLY."); });
+  },
+  _nextSlot: function () {
+    var used = {};
+    used[this._hostSlot] = 1;
+    for (var id in this.peers) if (this.peers[id].slot != null) used[this.peers[id].slot] = 1;
+    for (var s = 0; s < 8; s++) if (!used[s]) return s;
+    return 1;
+  },
+
+  // ---------------- JOINER ----------------
+  join: function () {
+    if (typeof RTCPeerConnection === "undefined") { this.status("WEBRTC UNSUPPORTED ON THIS DEVICE."); return; }
+    this.leave();
+    this.side = "guest";
+    this.myName = (Auth.ok() && Auth.callsign()) || (pilot && pilot.name) || "PILOT";
+    this.showGuest();
+    this.status("PASTE THE HOST'S INVITE, THEN MAKE REPLY.");
+  },
+  makeReply: function () {
+    var self = this;
+    var ta = document.getElementById("lanOfferIn");
+    var offer = ta ? String(ta.value || "").trim() : "";
+    if (!offer) { this.status("PASTE THE HOST'S INVITE FIRST."); return; }
+    var desc;
+    try { desc = JSON.parse(offer); } catch (e) { this.status("THAT INVITE LOOKS CORRUPTED."); return; }
+    var pc = new RTCPeerConnection(this._cfg());
+    this.hostPc = pc;
+    pc.ondatachannel = function (e) {
+      var dc = e.channel; self.hostDc = dc;
+      dc.onopen = function () { self.status("LINKED TO THE HOST — WAIT FOR THE START."); };
+      dc.onmessage = function (ev) { self._onHostMsg(ev); };
+    };
+    pc.onicecandidate = function (e) {
+      if (e.candidate) return;
+      var out = document.getElementById("lanAnswerOut");
+      if (out) out.value = JSON.stringify(pc.localDescription);
+      self.status("REPLY READY — COPY IT BACK TO THE HOST.");
+    };
+    pc.setRemoteDescription(new RTCSessionDescription(desc))
+      .then(function () { return pc.createAnswer(); })
+      .then(function (a) { return pc.setLocalDescription(a); })
+      .catch(function () { self.status("COULD NOT MAKE A REPLY — CHECK THE INVITE."); });
+  },
+  _onHostMsg: function (e) {
+    var msg; try { msg = JSON.parse(e.data); } catch (err) { return; }
+    if (msg.t === "hi") {
+      this.seed = msg.seed >>> 0;
+      this.code = msg.code || "";
+      this.max = msg.max || 2;
+      this._mySlot = (msg.slot | 0);
+      if (msg.name) this.hostName = msg.name;
+      this._send(this.hostDc, { t: "join", name: this.myName, slot: this._mySlot });
+      this.renderGuest();
+      this.status("LINKED (" + this.code + ") — WAITING FOR THE HOST TO START.");
+    } else if (msg.t === "start") {
+      this.beginRace(msg.seed >>> 0);
+    } else if (msg.t === "x") {
+      this._applyGhost(msg);
+    } else if (msg.t === "fin") {
+      // a rival finished — drop the host's ghost (slot 0) from my screen
+      if (this.racing && G.bot && G.bot.ghosts) {
+        for (var f = 0; f < G.bot.ghosts.length; f++) {
+          if ((G.bot.ghosts[f].uid | 0) === 0) { G.bot.ghosts[f].rivalLeft = true; G.bot.ghosts[f].alive = false; }
+        }
+      }
+    } else if (msg.t === "bye") {
+      this.status("THE HOST CLOSED THE ROOM.");
+      this.racing = false;
+    }
+  },
+  _applyGhost: function (msg) {
+    if (!this.racing || !G.bot || !G.bot.net) return;
+    var b = G.bot;
+    if (!b.ghosts || !b.ghosts.length) {
+      b.ghosts = [];
+      for (var i = 0; i < this.max; i++) {
+        if (i === this._mySlot) continue;   // skip MY seat (host: slot 0, guest: assigned slot)
+        b.ghosts.push({ uid: i, callsign: "LAN" + (i + 1), color: this.colorForSlot(i), remoteX: 480, alive: true, rivalLeft: false, ghost: true });
+      }
+    }
+    for (var j = 0; j < b.ghosts.length; j++) {
+      if (b.ghosts[j].uid === (msg.s | 0)) { b.ghosts[j].remoteX = msg.x; b.ghosts[j].alive = !!msg.a; break; }
+    }
+  },
+
+  // ---------------- shared ----------------
+  _code: function () {
+    var s = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", o = "";
+    for (var i = 0; i < 6; i++) o += s[(Math.random() * s.length) | 0];
+    return o;
+  },
+  _send: function (dc, msg) { if (dc) { try { dc.send(JSON.stringify(msg)); } catch (e) {} } },
+  _onMsg: function (id, peer, e) {
+    var msg; try { msg = JSON.parse(e.data); } catch (err) { return; }
+    if (msg.t === "join") {
+      peer.name = msg.name || "PILOT"; peer.ready = true;
+      if (msg.slot != null) peer.slot = msg.slot;
+      this.renderRoster();
+    } else if (msg.t === "x") {
+      peer.x = msg.x; peer.alive = !!msg.a; peer.elapsed = msg.e || 0; peer.seen = Date.now();
+      this._applyGhost(msg);   // update my own rendered ghosts too
+      this._relay(msg);        // relay to everyone else
+    } else if (msg.t === "fin") {
+      peer.alive = false;
+      // drop that seat's ghost on my screen
+      if (this.racing && G.bot && G.bot.ghosts) {
+        for (var f = 0; f < G.bot.ghosts.length; f++) {
+          if ((G.bot.ghosts[f].uid | 0) === (peer.slot | 0)) { G.bot.ghosts[f].rivalLeft = true; G.bot.ghosts[f].alive = false; }
+        }
+      }
+    } else if (msg.t === "ready") {
+      peer.ready = !!msg.r;
+      this.renderRoster();
+    }
+  },
+  _relay: function (msg) {
+    var txt = JSON.stringify(msg);
+    for (var id in this.peers) {
+      var dc = this.peers[id].dc;
+      if (dc && dc.readyState === "open") { try { dc.send(txt); } catch (e) {} }
+    }
+  },
+  _firstOpenless: function () {
+    for (var id in this.peers) {
+      var dc = this.peers[id].dc;
+      if (dc && dc.readyState === "open") continue;
+      return this.peers[id];
+    }
+    return null;
+  },
+  _present: function () {
+    var n = 1;   // me
+    for (var id in this.peers) if (this.peers[id].dc && this.peers[id].dc.readyState === "open") n++;
+    return n;
+  },
+  showCountdown: function (sec) {
+    var self = this, left = sec | 0;
+    if (this._cdTimer) clearInterval(this._cdTimer);
+    this._cdTimer = setInterval(function () {
+      if (left > 0) { showBanner(String(left), 1); left--; }
+      else { clearInterval(self._cdTimer); self._cdTimer = null; }
+    }, 1000);
+  },
+  start: function () {
+    if (this.side !== "host") return;
+    if (this._present() < 2) { this.status("WAITING FOR A FRIEND — NEED 2+ TO START."); return; }
+    this.racing = true;
+    this.showCountdown(3);
+    var self = this;
+    setTimeout(function () { self._relay({ t: "start", seed: self.seed }); }, 2600);
+    this.beginRace(this.seed);
+  },
+  beginRace: function (seed) {
+    this.racing = true;
+    this.hideAll();
+    Sfx.blip();
+    // Pre-build a ghost slot for every other seat so the win condition
+    // (all rivals gone) is correct before the first position packet arrives.
+    var ghosts = [];
+    for (var i = 0; i < this.max; i++) {
+      if (i === this._mySlot) continue;   // skip MY seat — every pilot flies their own slot
+      ghosts.push({ uid: i, callsign: "LAN" + (i + 1), color: this.colorForSlot(i) });
+    }
+    // host: attach real callsigns of linked peers to their slots
+    for (var id in this.peers) {
+      var p = this.peers[id];
+      if (!p.dc || p.dc.readyState !== "open") continue;
+      for (var g = 0; g < ghosts.length; g++) {
+        if (ghosts[g].uid === (p.slot | 0)) { ghosts[g].callsign = (p.name || "LAN").slice(0, 14); break; }
+      }
+    }
+    startMode("multiplayer", {
+      seed: (seed != null ? seed : this.seed) >>> 0,
+      net: true,
+      netKind: "lan",
+      side: this.side,
+      rival: "LAN",
+      ghosts: ghosts
+    });
+  },
+  push: function (x, alive, elapsed, force) {
+    if (!this.racing || this._leave) return;
+    var now = performance.now();
+    if (!force && now - this._pushT < 100) return;   // ~10Hz
+    this._pushT = now;
+    var msg = { t: "x", s: this._mySlot, x: Math.round(x), a: (alive !== false) ? 1 : 0, e: Math.round((elapsed || 0) * 10) / 10 };
+    if (this.side === "host") this._relay(msg);
+    else this._send(this.hostDc, msg);
+  },
+  leave: function () {
+    this._leave = true;
+    if (this._cdTimer) clearInterval(this._cdTimer);
+    if (this.side === "host") this._relay({ t: "bye" });
+    else this._send(this.hostDc, { t: "bye" });
+    for (var id in this.peers) { try { this.peers[id].pc.close(); } catch (e) {} }
+    try { if (this.hostPc) this.hostPc.close(); } catch (e) {}
+    this.peers = {};
+    this.hostPc = null; this.hostDc = null;
+    this.racing = false; this.side = null;
+    this.hideAll();
+    this.status("HOST a room, or paste a host's invite to join. Works on LAN / hotspot with internet off.");
+    var self = this;
+    setTimeout(function () { self._leave = false; }, 80);
+  },
+  finish: function (won) {
+    this.racing = false;
+    this._relay({ t: "fin", a: won ? 1 : 0 });
+    this.status(won ? "YOU TOOK THE ROUND — REMATCH?" : "ROUND OVER.");
+  },
+  rematch: function () {
+    if (this.side !== "host") { this.status("ONLY THE HOST CAN START A REMATCH."); return; }
+    this.seed = ((Math.random() * 2147483647) >>> 0);
+    this.racing = false;
+    this.showHost();
+    this.renderRoster();
+    this.showCountdown(3);
+    var self = this;
+    setTimeout(function () { self._relay({ t: "start", seed: self.seed }); }, 2600);
+  },
+
+  // ---------------- roster + UI ----------------
+  renderRoster: function () {
+    var box = document.getElementById("lanRoster");
+    if (!box) return;
+    var rows = [], n = 0;
+    rows.push(this._seat("HOST · " + this.myName.slice(0, 12), this.colorForSlot(this._hostSlot), true));
+    n++;
+    for (var id in this.peers) {
+      var p = this.peers[id];
+      if (!p.dc || p.dc.readyState !== "open") continue;
+      n++;
+      rows.push(this._seat((p.name || "PILOT").slice(0, 12), this.colorForSlot(p.slot || 1), false));
+    }
+    for (var e = n; e < this.max; e++) rows.push(this._seatEmpty());
+    box.innerHTML = rows.join("");
+    var sb = document.getElementById("btnLanStart");
+    if (sb) sb.hidden = !(this.side === "host" && n >= 2);
+  },
+  renderGuest: function () {
+    var box = document.getElementById("lanRosterGuest");
+    if (!box) return;
+    box.innerHTML = this._seat("YOU · " + this.myName.slice(0, 12), this.colorForSlot(this._mySlot), true) +
+                    this._seat("HOST · " + (this.hostName || "PILOT").slice(0, 12), this.colorForSlot(0), false);
+  },
+  _seat: function (label, color, me) {
+    return '<div class="roster-seat' + (me ? " me" : "") + '">' +
+      '<span class="roster-dot" style="background:' + color + '"></span>' +
+      '<span class="roster-cs">' + label + '</span></div>';
+  },
+  _seatEmpty: function () { return '<div class="roster-seat empty"><span class="roster-cs">OPEN SLOT</span></div>'; },
+  showHost: function () {
+    var h = document.getElementById("lanHostBox"); if (h) h.hidden = false;
+    var j = document.getElementById("lanJoinBox"); if (j) j.hidden = true;
+  },
+  showGuest: function () {
+    var h = document.getElementById("lanHostBox"); if (h) h.hidden = true;
+    var j = document.getElementById("lanJoinBox"); if (j) j.hidden = false;
+  },
+  hideAll: function () {
+    var h = document.getElementById("lanHostBox"); if (h) h.hidden = true;
+    var j = document.getElementById("lanJoinBox"); if (j) j.hidden = true;
+  }
+};
+
+// ---- net dispatcher: routes the shared multiplayer race calls to whichever
+// net is active (online Supabase NetRival, or offline LAN LanNet). ----
+var NET = {
+  active: function () {
+    if (G.netKind === "lan") return (typeof LanNet !== "undefined" && LanNet.racing) ? LanNet : null;
+    return (typeof NetRival !== "undefined" && NetRival.room) ? NetRival : null;
+  },
+  push: function (x, alive, elapsed, force) {
+    var n = this.active();
+    if (n) n.push(x, alive, elapsed, force);
+  },
+  finish: function (won) {
+    var n = this.active();
+    if (n) n.finish(won);
+  },
+  rematch: function () {
+    var n = this.active();
+    if (n) n.rematch();
+    else location.hash = "#/multiplayer";
+  },
+  leave: function () {
+    if (typeof NetRival !== "undefined") NetRival.leave();
+    if (typeof LanNet !== "undefined") LanNet.leave();
+  }
 };
 
 Passport.remote = {
@@ -3961,6 +5220,133 @@ Passport.remote = {
       Sfx.lose();
     });
   });
+})();
+
+// ================= feedback / comments (Phase 4) =================
+// Players send bugs/ideas/comments. Rows land in public.feedback (RLS: any
+// signed-in pilot inserts; only superior reads). A local outbox queues notes
+// when offline so nothing is lost. The owner reads them in-game via the INBOX
+// panel, and the forward-feedback Edge Function mails them (see supabase/).
+K.fbOutbox = "dodger_fb_outbox_v1";
+var Feedback = {
+  kind: "bug",
+  open: function () {
+    var m = $("#modalFeedback"); if (!m) return;
+    $("#fbMsg").value = "";
+    this._note("", false);
+    var wrap = $("#fbEmailWrap");            // email opt-in row: signed-in only
+    if (wrap) wrap.hidden = !Auth.ok();
+    var cb = $("#fbEmailNotify");
+    if (cb) cb.checked = true;
+    m.hidden = false;
+    try { $("#fbMsg").focus(); } catch (e) {}
+  },
+  close: function () { var m = $("#modalFeedback"); if (m) m.hidden = true; },
+  _note: function (t, bad) {
+    var n = $("#fbNote"); if (!n) return;
+    n.textContent = t || ""; n.hidden = !t;
+    n.classList.toggle("bad", !!bad);
+  },
+  setKind: function (k) {
+    this.kind = (k === "idea" || k === "other") ? k : "bug";
+    $$("#fbKinds .ghost-btn").forEach(function (b) {
+      b.classList.toggle("on", b.getAttribute("data-kind") === Feedback.kind);
+    });
+  },
+  _outbox: function () { var v = Store.get(K.fbOutbox, []); return Array.isArray(v) ? v : []; },
+  _queue: function (item) { var q = this._outbox(); q.push(item); Store.set(K.fbOutbox, q.slice(-20)); },
+  _flush: function () {
+    var self = this, q = this._outbox();
+    if (!q.length || !CLOUD.on) return;
+    Store.set(K.fbOutbox, []);
+    q.forEach(function (item) { self._post(item, true); });
+  },
+  _post: function (item, silent) {
+    var self = this;
+    return fetch(CLOUD.url + "/rest/v1/feedback", {
+      method: "POST", headers: Auth.hdrs({ "Prefer": "return=minimal" }),
+      body: JSON.stringify([{ kind: item.kind, msg: item.msg }])
+    }).then(function (r) {
+      if (!r.ok) throw new Error("http " + r.status);
+      return true;
+    }).catch(function () {
+      if (!silent) self._note("SAVED OFFLINE — WILL SEND WHEN YOU'RE BACK ONLINE.", true);
+      self._queue(item);
+      return false;
+    });
+  },
+  _rpc: function (name, body) {
+    return fetch(CLOUD.url + "/rest/v1/rpc/" + name, {
+      method: "POST", headers: Auth.hdrs(), body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json(); });
+  },
+  send: function () {
+    var self = this;
+    var msg = String($("#fbMsg").value || "").trim().slice(0, 1000);
+    if (!msg) { this._note("WRITE SOMETHING FIRST.", true); Sfx.lose(); return; }
+    if (Auth.ok()) {
+      var cb = $("#fbEmailNotify");
+      this._rpc("set_email_notify", { p_on: cb ? !!cb.checked : true }).catch(function () {});
+    }
+    var item = { kind: this.kind, msg: msg };
+    this._note("SENDING…", false);
+    this._post(item).then(function (ok) {
+      if (ok) {
+        self._note("SENT — THANK YOU! IT REACHES THE TEAM.", false);
+        $("#fbMsg").value = ""; Sfx.win();
+        setTimeout(function () { self.close(); }, 1200);
+      } else { Sfx.click(); }
+    });
+  },
+  inbox: function () {
+    var box = $("#inboxRows"); if (!box) return;
+    if (!Auth.superior()) { box.textContent = "SUPERIOR ONLY."; return; }
+    box.textContent = "LOADING…";
+    fetch(CLOUD.url + "/rest/v1/feedback?select=id,callsign,kind,msg,forwarded,read,at&order=at.desc&limit=40",
+          { headers: Auth.hdrs() })
+      .then(function (r) { if (!r.ok) throw new Error("http " + r.status); return r.json(); })
+      .then(function (rows) {
+        if (!rows || !rows.length) { box.textContent = "INBOX EMPTY — NO FEEDBACK YET."; return; }
+        box.innerHTML = rows.map(function (f) {
+          var flags = [];
+          if (f.forwarded) flags.push("MAILED");
+          if (f.read) flags.push("READ");
+          return "<div class='inbox-row'>" +
+            "<div class='ir-head'><span class='ir-kind " + (f.kind || "other") + "'>" +
+              String(f.kind || "other").toUpperCase() + "</span>" +
+              "<span class='ir-who'></span>" +
+              "<span class='ir-when'>" + new Date(f.at | 0).toLocaleString() + "</span></div>" +
+            "<div class='ir-msg'></div>" +
+            (flags.length ? "<div class='ir-flag'>" + flags.join(" · ") + "</div>" : "") +
+            "</div>";
+        }).join("");
+        var whos = box.querySelectorAll(".ir-who"), msgs = box.querySelectorAll(".ir-msg");
+        for (var i = 0; i < rows.length; i++) {
+          if (whos[i]) whos[i].textContent = String(rows[i].callsign || "ANON").slice(0, 14).toUpperCase();
+          if (msgs[i]) msgs[i].textContent = rows[i].msg || "";
+        }
+      })
+      .catch(function () { box.textContent = "COULD NOT LOAD — TRY AGAIN."; });
+  }
+};
+
+// ---- feedback wiring ----
+(function wireFeedback() {
+  var open = $("#btnFeedback"); if (open) open.addEventListener("click", function () { Feedback.open(); Sfx.click(); });
+  var cl = $("#btnFeedbackClose"); if (cl) cl.addEventListener("click", function () { Feedback.close(); Sfx.click(); });
+  var sd = $("#btnFeedbackSend"); if (sd) sd.addEventListener("click", function () { Feedback.send(); });
+  var ta = $("#fbMsg");
+  if (ta) ta.addEventListener("keydown", function (e) { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) Feedback.send(); });
+  $$("#fbKinds .ghost-btn").forEach(function (b) {
+    b.addEventListener("click", function () { Feedback.setKind(b.getAttribute("data-kind")); Sfx.click(); });
+  });
+  var mod = $("#modalFeedback");
+  if (mod) mod.addEventListener("click", function (e) { if (e.target === mod) Feedback.close(); });
+  try { Feedback._flush(); } catch (e) {}   // send any offline backlog now
+})();
+// ---- superior inbox wiring ----
+(function wireInbox() {
+  var rf = $("#btnInboxRefresh"); if (rf) rf.addEventListener("click", function () { Feedback.inbox(); Sfx.click(); });
 })();
 
 // ---- superior console: board wipe / row delete / roles / dev toys ----
@@ -4054,6 +5440,7 @@ function deleteCloudRun(id) {
   if (am) am.addEventListener("click", function (e) { if (e.target === am) closeAuth(); });
 })();
 try { Auth.load(); syncAuthUI(); } catch (e) {}
+try { Coins.render(); } catch (e) {}
 
   route();
   window.addEventListener("load", fitCanvas);

@@ -2,3 +2,11 @@
 Thumbs.db
 *.log
 node_modules/
+# local scratch — never ship to Pages
+*.bak
+*.bak2
+*.bak4
+stage*.txt
+h1.txt
+h2.txt
+h3.txt
