@@ -4851,13 +4851,16 @@ var LanNet = {
       self.renderRoster();
       self.status("A FRIEND IS LINKED (" + self._present() + "/" + self.max + "). MAKE ANOTHER INVITE OR START.");
     };
-    dc.onclose = function () { peer.alive = false; self.renderRoster(); };
+    dc.onclose = function () { self._onDisconnect(id, "friend dropped connection"); };
     dc.onmessage = function (e) { self._onMsg(id, peer, e); };
     pc.onicecandidate = function (e) {
       if (e.candidate) return;   // wait for gathering to finish
       var out = document.getElementById("lanOfferOut");
       if (out) out.value = JSON.stringify(pc.localDescription);
       self.status("INVITE READY — COPY IT TO YOUR FRIEND.");
+      // generate QR + auto-copy
+      self._showQR();
+      self._autoCopy();
     };
     pc.createOffer().then(function (o) { return pc.setLocalDescription(o); })
       .catch(function () { self.status("COULD NOT MAKE AN INVITE."); });
@@ -4872,8 +4875,42 @@ var LanNet = {
     var desc;
     try { desc = JSON.parse(ans); } catch (e) { this.status("THAT REPLY LOOKS CORRUPTED."); return; }
     peer.pc.setRemoteDescription(new RTCSessionDescription(desc))
-      .then(function () { if (ta) ta.value = ""; self.status("LINKING… your friend should connect shortly."); })
+      .then(function () {
+        if (ta) ta.value = "";
+        self.status("LINKING… your friend should connect shortly.");
+        // show QR + auto-copy the invite so the host can share it easily
+        self._showQR();
+        self._autoCopy();
+      })
       .catch(function () { self.status("COULD NOT LINK — RESEND THE REPLY."); });
+  },
+  // ---------- HOST INTAKE: auto-accept inbound invite and detect drops ----------
+  _onOffer: function (id, peer, e) {
+    var self = this;
+    var msg; try { msg = JSON.parse(e.data); } catch (err) { return; }
+    if (msg.t === "invite") {
+      var desc;
+      try { desc = JSON.parse(msg.relay); } catch (err) { return; }
+      peer.pc.setRemoteDescription(new RTCSessionDescription(desc))
+        .then(function () {
+          // adopt the inviting peer's data channel as our own lan channel
+          var dc = peer.pc.createDataChannel("lan");
+          dc.onopen = function () {
+            self._send(dc, { t: "join", name: self.myName, slot: self._mySlot });
+            self.renderRoster();
+            self.status("FRIEND JOINED — WAIT FOR THE START.");
+          };
+          dc.onclose = function () { self._onDisconnect(id, "you dropped connection"); };
+          dc.onmessage = function (ev) { self._onMsg(id, peer, ev); };
+          self.status("FRIEND JOINED — WAIT FOR THE START.");
+          peer.dc = dc;
+          self.renderRoster();
+          // auto-copy + QR of the invite they just pasted
+          self._autoCopy();
+          self._showQR();
+        })
+        .catch(function () { self.status("COULD NOT LINK — RESEND THE INVITE."); });
+    }
   },
   _nextSlot: function () {
     var used = {};
@@ -4964,6 +5001,99 @@ var LanNet = {
     var s = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", o = "";
     for (var i = 0; i < 6; i++) o += s[(Math.random() * s.length) | 0];
     return o;
+  },
+  // generate QR from invite, and auto-copy to clipboard
+  _showQR: function () {
+    var self = this;
+    var box = document.getElementById("lanOfferOut");
+    if (!box) return;
+    var val = box.value || "";
+    if (!val) return;
+    var qrBox = document.getElementById("lanQR");
+    if (!qrBox) {
+      qrBox = document.createElement("div");
+      qrBox.id = "lanQR";
+      qrBox.className = "lan-qr";
+      box.parentNode.insertBefore(qrBox, box.nextSibling);
+    }
+    if (qrBox.querySelector("canvas")) qrBox.querySelector("canvas").remove();
+    try {
+      new QRCode(qrBox, {
+        text: val,
+        width: 140,
+        height: 140,
+        colorDark: "#00f0ff",
+        colorLight: "#0a0a0f",
+        correctLevel: QRCode.CorrectLevel.H
+      });
+    } catch (e) { qrBox.innerHTML = ""; }
+  },
+  _autoCopy: function () {
+    var self = this;
+    var el = document.getElementById("lanOfferOut");
+    if (!el) return;
+    var val = el.value;
+    if (!val) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(val).then(function () {
+        self._toast("INVITE COPIED — PASTE IT INTO YOUR FRIEND'S BROWSER.");
+      }).catch(function () { self._toastInline(val); });
+    } else {
+      self._toastInline(val);
+    }
+  },
+  _toastInline: function (text) {
+    var el = document.getElementById("lanOfferOut");
+    if (!el) return;
+    el.select();
+    el.setSelectionRange(0, el.value.length);
+    try { document.execCommand("copy"); } catch (e) {}
+    this.status("INVITE COPIED INTO THE FIELD — SELECT IT AND PASTE.");
+  },
+  _toast: function (msg) {
+    var t = document.getElementById("lanCopyToast");
+    if (!t) {
+      t = document.createElement("div");
+      t.id = "lanCopyToast";
+      t.className = "toast";
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(function () {
+      t.classList.remove("show");
+    }, 2600);
+  },
+  // ---------- DISCONNECT DETECTION ----------
+  _onDisconnect: function (peerId, reason) {
+    var self = this;
+    var peer = this.peers[peerId];
+    if (!peer) return;
+    peer.alive = false;
+    self.renderRoster();
+    if (peerId === this._mySlot) {
+      this.status("YOU HAVE DISCONNECTED — RESTART TO RECONNECT.");
+    } else if (reason) {
+      this.status("FRIEND (" + peer.name + ") DISCONNECTED — " + reason);
+    } else {
+      this.status("FRIEND (" + peer.name + ") DISCONNECTED.");
+    }
+  },
+
+    var t = document.getElementById("lanCopyToast");
+    if (!t) {
+      t = document.createElement("div");
+      t.id = "lanCopyToast";
+      t.className = "toast";
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(function () {
+      t.classList.remove("show");
+    }, 2600);
   },
   _send: function (dc, msg) { if (dc) { try { dc.send(JSON.stringify(msg)); } catch (e) {} } },
   _onMsg: function (id, peer, e) {
