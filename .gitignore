@@ -10,3 +10,8 @@ stage*.txt
 h1.txt
 h2.txt
 h3.txt
+# dead weight — never ship
+*.png
+!icon-192.png
+!icon-512.png
+!favicon.svg
