@@ -46,7 +46,6 @@ create table if not exists public.room_members (
   joined_at bigint not null default public.epoch_ms(),
   primary key (room_code, user_id)
 );
-);
 alter table public.room_members enable row level security;
 
 -- ---- room chat (login-only, 140 chars, polled ~2s) ----
@@ -56,7 +55,6 @@ create table if not exists public.room_chats (
   user_id   uuid not null references auth.users(id) on delete cascade,
   callsign  text not null default '',
   at        bigint not null default public.epoch_ms()
-);
 );
 alter table public.room_chats enable row level security;
 create index if not exists room_chats_tail on public.room_chats (room_code, at);
