@@ -26,7 +26,7 @@ create policy "ct_read_own" on public.coin_topups for select
 -- players cannot insert directly (server-side only via Edge Function)
 drop policy if exists "ct_insert" on public.coin_topups;
 create policy "ct_insert" on public.coin_topups for insert
-  using (false);
+  with check (false);
 
 -- superior can update status (mark success/failed)
 drop policy if exists "ct_update_superior" on public.coin_topups;
