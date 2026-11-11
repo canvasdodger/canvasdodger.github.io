@@ -10,7 +10,7 @@ drop function if exists public.create_room(text, integer);
 drop function if exists public.join_room(text);
 drop function if exists public.rematch_room(text);
 drop function if exists public.room_member(text);
-drop table if exists public.rooms;
+drop table if exists public.rooms cascade;
 
 -- ---- new rooms table ----
 -- Utility function for current epoch in milliseconds
