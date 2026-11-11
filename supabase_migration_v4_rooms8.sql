@@ -13,6 +13,12 @@ drop function if exists public.room_member(text);
 drop table if exists public.rooms;
 
 -- ---- new rooms table ----
+-- Utility function for current epoch in milliseconds
+create or replace function public.epoch_ms()
+returns bigint language sql stable as $$
+  select (extract(epoch from now()) * 1000)::bigint;
+$$;
+
 create table if not exists public.rooms (
   code        text primary key check (code ~ '^[A-HJ-NP-Z2-9]{6}$'),
   seed        integer not null,
@@ -21,9 +27,8 @@ create table if not exists public.rooms (
   host_id     uuid not null references auth.users(id) on delete cascade,
   winner      uuid,                                  -- user_id of last survivor
   starts_at   bigint not null default 0,             -- epoch ms; countdown anchor
-  created_at  bigint not null default (extract(epoch from now()) * 1000)::bigint
+  created_at  bigint not null default public.epoch_ms()
 );
-alter table public.rooms enable row level security;
 
 -- ---- one row per player in a room ----
 create table if not exists public.room_members (
@@ -31,16 +36,16 @@ create table if not exists public.room_members (
   user_id   uuid not null references auth.users(id) on delete cascade,
   callsign  text not null default '',
   paint     text not null default 'cyan',            -- ship paint id
-  color     text not null default '#00f0ff',         -- assigned distinct hex
+  color     text not null default '#00f0ff',         -- assigned distinct hex (default theme color: cyan-blue, update here if theme changes)
   slot      integer not null default 0 check (slot between 0 and 7),
   ready     boolean not null default false,
   x         real not null default 453,
   alive     boolean not null default true,
   elapsed   real not null default 0,
   seen      bigint not null default 0,
-  left_at   bigint not null default 0,               -- set when they leave/disconnect
-  joined_at bigint not null default (extract(epoch from now()) * 1000)::bigint,
+  joined_at bigint not null default public.epoch_ms(),
   primary key (room_code, user_id)
+);
 );
 alter table public.room_members enable row level security;
 
@@ -50,8 +55,8 @@ create table if not exists public.room_chats (
   room_code text not null references public.rooms(code) on delete cascade,
   user_id   uuid not null references auth.users(id) on delete cascade,
   callsign  text not null default '',
-  msg       text not null check (char_length(msg) between 1 and 140),
-  at        bigint not null default (extract(epoch from now()) * 1000)::bigint
+  at        bigint not null default public.epoch_ms()
+);
 );
 alter table public.room_chats enable row level security;
 create index if not exists room_chats_tail on public.room_chats (room_code, at);
