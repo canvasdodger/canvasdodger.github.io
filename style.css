@@ -1118,3 +1118,44 @@ h1.small { margin: 8px 0 4px; font-family: var(--font-display); font-size: clamp
 .toast.show {
   opacity: 1;
 }
+
+/* ================= GH₵ Top-up modal ================= */
+.topup-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0;
+}
+.topup-amt, .topup-prov {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  background: var(--glass);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.topup-amt.on, .topup-prov.on {
+  background: var(--cyan);
+  color: #02040a;
+  border-color: var(--cyan);
+}
+#topupPhone {
+  width: 100%;
+  padding: 8px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: inherit;
+}
+#topupStatus {
+  font-size: 12px;
+  min-height: 16px;
+  margin-top: 8px;
+}

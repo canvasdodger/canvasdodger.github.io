@@ -587,6 +587,192 @@ var Coins = {
     for (var i = 0; i < els.length; i++) els[i].textContent = lbFmt(this.get());
   }
 };
+
+// ================= GH₵ top-up (Paystack: MTN + Telecel) =================
+// Server-side payment keys never ship to the browser. The client calls the
+// initiate-topup Edge Function, which calls Paystack server-side, then returns
+// an authorization URL. Paystack webhooks topup-webhook to credit coins.
+var TOPUP = {
+  // 1 GH₵ = 100 ◈ coins
+  coinsPerGhs: 100,
+  amounts: [5, 10, 20, 50, 100], // GH₵ options
+  providers: [
+    { id: "mtn", label: "MTN Mobile Money" },
+    { id: "telecel", label: "Telecel Cash" },
+  ],
+  apiBase: CLOUD.url + "/functions/v1",
+
+  // Build the Edge Function URL
+  initiateUrl: function () { return this.apiBase + "/initiate-topup"; },
+
+  // Call the Edge Function to initialize a Paystack MoMo transaction
+  initiate: function (amountGhs, provider, phone, cb) {
+    if (!Auth.ok()) { cb && cb({ ok: false, error: "sign in first" }); return; }
+    var self = this;
+    fetch(self.initiateUrl(), {
+      method: "POST",
+      headers: Auth.hdrs({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        amount_ghs: amountGhs,
+        provider: provider,
+        phone: phone,
+        email: (Auth.profile && Auth.profile.email) || "",
+        callsign: Auth.callsign() || "",
+      }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        cb && cb(j);
+      })
+      .catch(function (err) { cb && cb({ ok: false, error: String(err) }); });
+  },
+
+  award: function (coins) {
+    Coins.add(coins);
+  },
+};
+
+// Wire up the top-up button once DOM is ready
+(function wireTopup() {
+  var btn = $("btnCoinTopup");
+  if (!btn) return;
+  btn.disabled = false;
+  btn.title = "Buy coins with Ghana Cedis (MTN / Telecel)";
+  btn.addEventListener("click", function () { openTopupModal(); });
+})();
+
+// Wire up top-up modal buttons
+(function wireTopupModal() {
+  var closeBtn = $("btnTopupClose");
+  if (closeBtn) closeBtn.addEventListener("click", function () { closeTopupModal(); });
+  var payBtn = $("btnTopupPay");
+  if (payBtn) payBtn.addEventListener("click", function () { doTopup(); });
+  // close when clicking outside modal
+  var modal = $("modalTopup");
+  if (modal) modal.addEventListener("click", function (e) { if (e.target === modal) closeTopupModal(); });
+})();
+
+function openTopupModal() {
+  if (!Auth.ok()) { openAuth("TOPUP", null); return; }
+  var m = $("modalTopup");
+  if (!m) return;
+  // render amount chips
+  var amtBox = $("topupAmounts");
+  if (amtBox) {
+    amtBox.innerHTML = "";
+    TOPUP.amounts.forEach(function (a) {
+      var b = document.createElement("button");
+      b.className = "topup-amt";
+      b.textContent = "GH₵ " + a;
+      b.dataset.amount = a;
+      b.addEventListener("click", function () {
+        $$(".topup-amt").forEach(function (x) { x.classList.remove("on"); });
+        b.classList.add("on");
+        $("topupAmount").value = a;
+        $("topupPayAmount").textContent = a;
+      });
+      if (a === TOPUP.amounts[0]) b.classList.add("on");
+      amtBox.appendChild(b);
+    });
+    $("topupAmount").value = TOPUP.amounts[0];
+    $("topupPayAmount").textContent = TOPUP.amounts[0];
+  }
+  // render provider chips
+  var provBox = $("topupProviders");
+  if (provBox) {
+    provBox.innerHTML = "";
+    TOPUP.providers.forEach(function (p) {
+      var b = document.createElement("button");
+      b.className = "topup-prov";
+      b.textContent = p.label;
+      b.dataset.provider = p.id;
+      b.addEventListener("click", function () {
+        $$(".topup-prov").forEach(function (x) { x.classList.remove("on"); });
+        b.classList.add("on");
+        $("topupProvider").value = p.id;
+      });
+      if (p.id === TOPUP.providers[0].id) b.classList.add("on");
+      provBox.appendChild(b);
+    });
+    $("topupProvider").value = TOPUP.providers[0].id;
+  }
+  $("topupPhone").value = "";
+  $("topupStatus").textContent = "";
+  m.hidden = false;
+}
+
+function closeTopupModal() {
+  var m = $("modalTopup");
+  if (m) m.hidden = true;
+}
+
+function doTopup() {
+  var amount = parseInt($("topupAmount").value || "0", 10);
+  var provider = $("topupProvider").value || "mtn";
+  var phone = $("topupPhone").value || "";
+  var statusEl = $("topupStatus");
+  if (!amount || amount < 1) { statusEl.textContent = "Enter a valid amount."; return; }
+  if (!phone) { statusEl.textContent = "Enter your phone number."; return; }
+  statusEl.textContent = "Initializing payment with Paystack…";
+  TOPUP.initiate(amount, provider, phone, function (res) {
+    if (!res || !res.ok) {
+      statusEl.textContent = (res && res.error) || "Payment could not be started.";
+      return;
+    }
+    statusEl.textContent = "Redirecting to Paystack…";
+    // Open Paystack authorization URL (redirects user to complete MoMo on phone)
+    if (res.authorization_url) {
+      closeTopupModal();
+      // Poll briefly for completion, then redirect
+      setTimeout(function () {
+        location.href = res.authorization_url;
+      }, 800);
+    } else if (res.access_code) {
+      statusEl.textContent = "Paystack ready — check your phone to authorize.";
+    }
+  });
+}
+
+// ================= credit pending top-ups to local wallet =================
+// After a successful Paystack webhook credits coins to the passport (cloud),
+// the client checks here for any successful top-ups not yet added to the
+// local ◈ wallet and applies them.
+K.topupCredited = "dodger_topup_credited_v1";
+function creditPendingTopups() {
+  if (!CLOUD.on || !Auth.ok()) return;
+  var credited = Store.get(K.topupCredited, []);
+  if (!Array.isArray(credited)) credited = [];
+  fetch(CLOUD.url + "/rest/v1/coin_topups?status=eq.success&credited=eq.false&select=reference,coins_awarded&order=created_at.asc", {
+    headers: Auth.hdrs(),
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (rows) {
+      if (!rows || !rows.length) return;
+      var total = 0;
+      var newlyCredited = credited.slice();
+      rows.forEach(function (row) {
+        if (credited.indexOf(row.reference) >= 0) return;
+        total += (row.coins_awarded || 0);
+        newlyCredited.push(row.reference);
+      });
+      if (total > 0) {
+        Coins.add(total);
+        Store.set(K.topupCredited, newlyCredited);
+        var el = $("topupStatus");
+        if (el) el.textContent = "◈ " + total + " coins added to your wallet.";
+      }
+    })
+    .catch(function () { /* silent — will retry next time */ });
+}
+
+// Check for pending top-ups when the top-up modal opens
+var _origOpenTopup = openTopupModal;
+openTopupModal = function () {
+  creditPendingTopups();
+  _origOpenTopup();
+};
+
+// ================= ship customizer (HANGAR) =================
 // free defaults every pilot starts with
 var SHOP = {
   paints: [

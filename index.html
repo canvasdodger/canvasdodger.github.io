@@ -505,9 +505,36 @@
       </div>
       <div class="thumb-row" id="thumbRow"></div>
       <div class="btn-row" style="justify-content:center">
-        <button class="ghost-btn" id="btnCoinTopup" disabled title="Coming soon — buy coins with Ghana Cedis">◈ TOP UP GH₵ (COMING SOON)</button>
+        <button class="ghost-btn primary" id="btnCoinTopup" title="Buy coins with Ghana Cedis (MTN / Telecel)">◈ TOP UP GH₵</button>
         <button class="ghost-btn" id="btnShipClose">CLOSE</button>
         <button class="ghost-btn primary" id="btnShipDone">TAKE TO FLIGHT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= GH₵ TOP-UP MODAL ================= -->
+  <div class="modal" id="modalTopup" hidden>
+    <div class="panel">
+      <h3>◈ TOP UP COINS</h3>
+      <p class="story">Buy coins with Ghana Cedis via MTN Mobile Money or Telecel Cash. Pay securely with Paystack.</p>
+      <div style="margin:14px 0">
+        <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--dim)">Amount (GH₵)</label>
+        <div class="topup-row" id="topupAmounts"></div>
+        <input type="hidden" id="topupAmount" value="5">
+      </div>
+      <div style="margin:14px 0">
+        <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--dim)">Provider</label>
+        <div class="topup-row" id="topupProviders"></div>
+        <input type="hidden" id="topupProvider" value="mtn">
+      </div>
+      <div style="margin:14px 0">
+        <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--dim)">Phone number</label>
+        <input type="tel" id="topupPhone" placeholder="e.g. 024XXXXXXX or 23324XXXXXXX" style="width:100%;padding:8px;background:var(--glass);border:1px solid var(--line);border-radius:6px;color:var(--text)">
+      </div>
+      <div id="topupStatus" style="margin:10px 0;font-size:12px;color:var(--dim);min-height:16px"></div>
+      <div class="btn-row" style="justify-content:center;margin-top:14px">
+        <button class="ghost-btn" id="btnTopupClose" type="button">CLOSE</button>
+        <button class="ghost-btn primary" id="btnTopupPay" type="button">PAY GH₵ <span id="topupPayAmount">5</span></button>
       </div>
     </div>
   </div>
