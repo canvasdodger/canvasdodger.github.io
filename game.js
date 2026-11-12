@@ -1011,6 +1011,16 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     var tutMeta = $("#metaTutorial");
     if (tutMeta) tutMeta.textContent = (tut && tut.done) ? "GRADUATED ✓" : "NOT GRADUATED";
     Coins.render();
+    // Global online presence chip
+    var chip = $("#presenceChip");
+    if (chip) {
+      if (Auth.ok()) {
+        chip.hidden = false;
+        Presence.renderOnlineChip();
+      } else {
+        chip.hidden = true;
+      }
+    }
   }
 
   function route() {
@@ -4521,6 +4531,83 @@ function syncAuthUI() {
     if (mb && !mb.hidden) renderBoard();
   } catch (e) {}
 }
+
+// ================= pilot presence (who's online) =================
+// Tracks signed-in pilots' online status via the pilot_presence table.
+// Heartbeat updates last_seen every 30s; home screen shows a live count.
+var Presence = {
+  timer: null,
+  active: false,
+  touch: function (callsign, status, mode) {
+    if (!CLOUD.on || !Auth.ok()) return;
+    fetch(CLOUD.url + "/rest/v1/rpc/touch_presence", {
+      method: "POST",
+      headers: Auth.hdrs({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ p_callsign: callsign, p_status: status, p_mode: mode }),
+    }).catch(function () { /* silent — presence is best-effort */ });
+  },
+  startHeartbeat: function () {
+    if (this.active) return;
+    this.active = true;
+    var self = this;
+    this.timer = setInterval(function () {
+      if (!Auth.ok()) { self.stopHeartbeat(); return; }
+      self.touch(Auth.callsign() || "", G.state === "playing" ? "in-game" : "menu", G.mode || "");
+    }, 30000);
+    // immediate touch on start
+    if (Auth.ok()) this.touch(Auth.callsign() || "", G.state === "playing" ? "in-game" : "menu", G.mode || "");
+  },
+  stopHeartbeat: function () {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    this.active = false;
+  },
+  fetchOnline: function (cb) {
+    if (!CLOUD.on) { cb && cb(0, []); return; }
+    var cutoff = Date.now() - 60000; // seen in last 60s = online
+    fetch(CLOUD.url + "/rest/v1/pilot_presence?last_seen=gte." + cutoff + "&select=callsign,status,mode,last_seen&order=last_seen.desc", {
+      headers: Auth.hdrs(),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (rows) {
+        var list = Array.isArray(rows) ? rows : [];
+        cb && cb(list.length, list);
+      })
+      .catch(function () { cb && cb(0, []); });
+  },
+  renderOnlineChip: function () {
+    var el = $("#pilotsOnline");
+    if (!el) return;
+    this.fetchOnline(function (count, list) {
+      el.textContent = count + " PILOT" + (count === 1 ? "" : "S") + " ONLINE";
+      el.title = list.map(function (p) { return p.callsign; }).join(", ") || "No pilots online";
+    });
+  }
+};
+
+// Touch presence on sign-in / sign-out
+var _origSyncAuthUI = syncAuthUI;
+syncAuthUI = function () {
+  _origSyncAuthUI();
+  if (Auth.ok()) {
+    Presence.startHeartbeat();
+  } else {
+    Presence.stopHeartbeat();
+  }
+};
+
+// Update presence when entering/leaving a race
+var _origBeginPlay = beginPlay;
+beginPlay = function () {
+  if (Auth.ok()) Presence.touch(Auth.callsign() || "", "in-game", G.mode || "");
+  _origBeginPlay();
+};
+
+var _origGoHome = goHome;
+goHome = function () {
+  if (Auth.ok()) Presence.touch(Auth.callsign() || "", "menu", "");
+  _origGoHome();
+};
 
 LB.remote = {
   submit: function (row) {   // fire-and-forget: local save already happened

@@ -1184,3 +1184,33 @@ h1.small { margin: 8px 0 4px; font-family: var(--font-display); font-size: clamp
   from { transform: scale(1); opacity: 1; }
   to { transform: scale(1.05); opacity: 0.85; }
 }
+
+/* ================= Global presence chip ================= */
+.presence-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 6px 14px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.presence-dot {
+  width: 6px;
+  height: 6px;
+  background: #5dff9a;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #5dff9a;
+  animation: presenceBlink 1.2s ease-in-out infinite;
+}
+@keyframes presenceBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
