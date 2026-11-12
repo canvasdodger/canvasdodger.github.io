@@ -5376,20 +5376,6 @@ var LanNet = {
     }
   },
 
-  var t = document.getElementById("lanCopyToast");
-    if (!t) {
-      t = document.createElement("div");
-      t.id = "lanCopyToast";
-      t.className = "toast";
-      document.body.appendChild(t);
-    }
-    t.textContent = msg;
-    t.classList.add("show");
-    clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(function () {
-      t.classList.remove("show");
-    }, 2600);
-  },
   _send: function (dc, msg) { if (dc) { try { dc.send(JSON.stringify(msg)); } catch (e) {} } },
   _onMsg: function (id, peer, e) {
     var msg; try { msg = JSON.parse(e.data); } catch (err) { return; }
