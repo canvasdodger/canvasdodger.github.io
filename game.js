@@ -1353,7 +1353,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
         };
       }
       showScreen("game");
-      beginPlay();
+      countdown(beginPlay);
     }
 
     if (mode === "couch") {
@@ -1381,8 +1381,10 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       // HUD, and game-over overlay all reuse the normal path untouched.
       player = G.couch.ships[0].ship;
       showScreen("game");
-      beginPlay();
-      showBanner("COUCH · " + cfg.count + " PILOTS · LAST ALIVE WINS", 1.8);
+      countdown(function () {
+        beginPlay();
+        showBanner("COUCH · " + cfg.count + " PILOTS · LAST ALIVE WINS", 1.8);
+      });
     }
   }
 
@@ -1501,6 +1503,26 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
     overlay.hidden = false;
   }
   function hideOverlay() { overlay.hidden = true; overlayPanel.innerHTML = ""; }
+
+// ================= pre-race countdown (3-2-1-GO) =================
+// Shown before races (multiplayer, online, couch) so all pilots start
+// at the same moment. After "GO", the callback (typically beginPlay) runs.
+function countdown(cb) {
+  var nums = ["3", "2", "1", "GO"];
+  var i = 0;
+  function tick() {
+    if (i >= nums.length) { hideOverlay(); if (cb) cb(); return; }
+    var n = nums[i];
+    showOverlay(
+      '<div class="countdown">' + n + '</div>' +
+      '<div class="countdown-sub">' + (n === "GO" ? "RACE START" : "GET READY") + '</div>'
+    );
+    hudStatus.textContent = n === "GO" ? "GO" : "COUNTDOWN";
+    i++;
+    setTimeout(tick, n === "GO" ? 500 : 900);
+  }
+  tick();
+}
 
   function showBanner(text, seconds) {
     bannerEl.textContent = text;
