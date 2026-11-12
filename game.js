@@ -634,7 +634,7 @@ var TOPUP = {
 
 // Wire up the top-up button once DOM is ready
 (function wireTopup() {
-  var btn = $("btnCoinTopup");
+  var btn = $("#btnCoinTopup");
   if (!btn) return;
   btn.disabled = false;
   btn.title = "Buy coins with Ghana Cedis (MTN / Telecel)";
@@ -643,21 +643,21 @@ var TOPUP = {
 
 // Wire up top-up modal buttons
 (function wireTopupModal() {
-  var closeBtn = $("btnTopupClose");
+  var closeBtn = $("#btnTopupClose");
   if (closeBtn) closeBtn.addEventListener("click", function () { closeTopupModal(); });
-  var payBtn = $("btnTopupPay");
+  var payBtn = $("#btnTopupPay");
   if (payBtn) payBtn.addEventListener("click", function () { doTopup(); });
   // close when clicking outside modal
-  var modal = $("modalTopup");
+  var modal = $("#modalTopup");
   if (modal) modal.addEventListener("click", function (e) { if (e.target === modal) closeTopupModal(); });
 })();
 
 function openTopupModal() {
   if (!Auth.ok()) { openAuth("TOPUP", null); return; }
-  var m = $("modalTopup");
+  var m = $("#modalTopup");
   if (!m) return;
   // render amount chips
-  var amtBox = $("topupAmounts");
+  var amtBox = $("#topupAmounts");
   if (amtBox) {
     amtBox.innerHTML = "";
     TOPUP.amounts.forEach(function (a) {
@@ -668,17 +668,17 @@ function openTopupModal() {
       b.addEventListener("click", function () {
         $$(".topup-amt").forEach(function (x) { x.classList.remove("on"); });
         b.classList.add("on");
-        $("topupAmount").value = a;
-        $("topupPayAmount").textContent = a;
+        $("#topupAmount").value = a;
+        $("#topupPayAmount").textContent = a;
       });
       if (a === TOPUP.amounts[0]) b.classList.add("on");
       amtBox.appendChild(b);
     });
-    $("topupAmount").value = TOPUP.amounts[0];
-    $("topupPayAmount").textContent = TOPUP.amounts[0];
+    $("#topupAmount").value = TOPUP.amounts[0];
+    $("#topupPayAmount").textContent = TOPUP.amounts[0];
   }
   // render provider chips
-  var provBox = $("topupProviders");
+  var provBox = $("#topupProviders");
   if (provBox) {
     provBox.innerHTML = "";
     TOPUP.providers.forEach(function (p) {
@@ -689,28 +689,28 @@ function openTopupModal() {
       b.addEventListener("click", function () {
         $$(".topup-prov").forEach(function (x) { x.classList.remove("on"); });
         b.classList.add("on");
-        $("topupProvider").value = p.id;
+        $("#topupProvider").value = p.id;
       });
       if (p.id === TOPUP.providers[0].id) b.classList.add("on");
       provBox.appendChild(b);
     });
-    $("topupProvider").value = TOPUP.providers[0].id;
+    $("#topupProvider").value = TOPUP.providers[0].id;
   }
-  $("topupPhone").value = "";
-  $("topupStatus").textContent = "";
+  $("#topupPhone").value = "";
+  $("#topupStatus").textContent = "";
   m.hidden = false;
 }
 
 function closeTopupModal() {
-  var m = $("modalTopup");
+  var m = $("#modalTopup");
   if (m) m.hidden = true;
 }
 
 function doTopup() {
-  var amount = parseInt($("topupAmount").value || "0", 10);
-  var provider = $("topupProvider").value || "mtn";
-  var phone = $("topupPhone").value || "";
-  var statusEl = $("topupStatus");
+  var amount = parseInt($("#topupAmount").value || "0", 10);
+  var provider = $("#topupProvider").value || "mtn";
+  var phone = $("#topupPhone").value || "";
+  var statusEl = $("#topupStatus");
   if (!amount || amount < 1) { statusEl.textContent = "Enter a valid amount."; return; }
   if (!phone) { statusEl.textContent = "Enter your phone number."; return; }
   statusEl.textContent = "Initializing payment with Paystack…";
