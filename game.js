@@ -5376,7 +5376,7 @@ var LanNet = {
     }
   },
 
-    var t = document.getElementById("lanCopyToast");
+  var t = document.getElementById("lanCopyToast");
     if (!t) {
       t = document.createElement("div");
       t.id = "lanCopyToast";
