@@ -600,10 +600,10 @@ var TOPUP = {
     { id: "mtn", label: "MTN Mobile Money" },
     { id: "telecel", label: "Telecel Cash" },
   ],
-  apiBase: CLOUD.url + "/functions/v1",
+  apiBase: function () { return CLOUD.url + "/functions/v1"; },
 
   // Build the Edge Function URL
-  initiateUrl: function () { return this.apiBase + "/initiate-topup"; },
+  initiateUrl: function () { return this.apiBase() + "/initiate-topup"; },
 
   // Call the Edge Function to initialize a Paystack MoMo transaction
   initiate: function (amountGhs, provider, phone, cb) {
@@ -1087,8 +1087,8 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       pattern: "basic", speedMul: 0.9,
       palette: { bg1: "#081229", bg2: "#010615", grid: "rgba(0,240,255,0.10)", accent: "#00f0ff", enemy: "#ffa87d", shard: "#ffd75d" } },
     { id: 2, code: "S02", name: "NEON RAIN",
-      story: "Dive into the neon storm city. Graze blocks without dying — 10 grazes breach the shield ceiling.",
-      objective: { type: "graze", need: 10, time: 50 },
+      story: "Dive into the neon storm city. Graze blocks without dying — 4 grazes breach the shield ceiling.",
+      objective: { type: "graze", need: 4, time: 60 },
       pattern: "rain", speedMul: 1.1,
       palette: { bg1: "#150a2c", bg2: "#05010f", grid: "rgba(255,43,214,0.12)", accent: "#ff2bd6", enemy: "#ff8ad4", shard: "#7ce7ff" } },
     { id: 3, code: "S03", name: "PULSE GRID",
@@ -1098,8 +1098,8 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       palette: { bg1: "#041b17", bg2: "#010a08", grid: "rgba(93,255,154,0.12)", accent: "#5dff9a", enemy: "#ffb454", shard: "#00f0ff" } },
     { id: 4, code: "S04", name: "VOID STORM",
       story: "Gravity is wrong here. Stalkers hunt you. Bait them into open lanes and hold the line.",
-      objective: { type: "survive", time: 45 },
-      pattern: "homing", speedMul: 1.25,
+      objective: { type: "survive", time: 35 },
+      pattern: "homing", speedMul: 1.1,
       palette: { bg1: "#120733", bg2: "#03011a", grid: "rgba(177,140,255,0.13)", accent: "#b18cff", enemy: "#ff5d8a", shard: "#ffd75d" } },
     { id: 5, code: "S05", name: "CORE BREACH",
       story: "The reactor fights back. Overload 3 nodes while the core is vulnerable — dodge the spiral otherwise.",
@@ -1277,7 +1277,7 @@ window.addEventListener("keydown", function (e) { if (e.key === "6" && activeScr
       }
       G.lives = 3;
       G.timeLeft = G.sector.objective.time;
-      G.spawnGap = G.sector.pattern === "boss" ? 9 : 0.85;
+      G.spawnGap = G.sector.pattern === "boss" ? 9 : (G.sector.pattern === "homing" ? 1.15 : 0.85);
       G.phaseIdx = 0;
       player = makePlayer(453, cheatShipColor(paintById(HANGAR.paint).hex));
       showScreen("game");
@@ -1650,7 +1650,7 @@ function countdown(cb) {
       obstacles.push({ x: gapX0, y: -46, w: gapW0, h: 20, vy: spd, vx: 0, type: "warn", color: pal.accent, grazed: true });
     } else if (pattern === "homing") {
       var hs = 34 + r() * 16;
-      addBlock(r() * (960 - hs), -hs, hs, hs, 140 + r() * 60, pal.enemy, { type: "homing", homeT: 2.0 });
+      addBlock(r() * (960 - hs), -hs, hs, hs, 115 + r() * 45, pal.enemy, { type: "homing", homeT: 1.3 });
     } else if (pattern === "crossfire") {
       var fromLeft = r() > 0.5;
       var sz = 30 + r() * 20;
@@ -2625,7 +2625,7 @@ function countdown(cb) {
         // shared arena: every homing drone chases YOU (the local player)
         var tAlive = true;
         var pc = (player.x + player.w / 2);
-        if (tAlive) ob.x += clamp(pc - (ob.x + ob.w / 2), -120 * dt, 120 * dt);
+        if (tAlive) ob.x += clamp(pc - (ob.x + ob.w / 2), -85 * dt, 85 * dt);
       }
       ob.y += ob.vy * dt * speedScale;
       ob.x += (ob.vx || 0) * dt;
@@ -2700,9 +2700,10 @@ function countdown(cb) {
       // graze detection
       if (!ob.grazed && player && G.phaseUpT <= 0) {
         var overlapX = player.x + player.w > ob.x && player.x < ob.x + ob.w;
+          var nearX = player.x + player.w + 22 > ob.x && player.x - 22 < ob.x + ob.w; // GRAZEFIX
         var nearY = ob.y + ob.h > player.y - 26 && ob.y < player.y + player.h + 26;
         var noHit = !(overlapX && ob.y < player.y + player.h && ob.y + ob.h > player.y);
-        if (overlapX && nearY && noHit) {
+        if (nearX && nearY && noHit) { // GRAZEFIX
           if (ob.type === "splitter" && !ob.splitDone) splitBlock(ob);
           ob.grazed = true;
           G.graze++;
@@ -3289,7 +3290,7 @@ function countdown(cb) {
       }
       drawCouchFx();
     } else {
-      var myCs = (Auth.ok() && Auth.callsign()) || (pilot && pilot.name) || "YOU";
+      var myCs = (typeof Auth !== "undefined" && Auth && Auth.ok() && Auth.callsign()) || (pilot && pilot.name) || "YOU";
       drawShip(player, "YOU · " + String(myCs).slice(0, 14).toUpperCase());
       if (G.bot && G.bot.net && G.bot.ghosts && G.bot.ghosts.length) {
         // 2-8 online: draw every rival ghost, each with its own callsign + colour
@@ -3754,18 +3755,6 @@ function countdown(cb) {
   $("#btnHowto").addEventListener("click", function () { howto.hidden = false; });
   $("#btnHowtoClose").addEventListener("click", function () { howto.hidden = true; });
   howto.addEventListener("click", function (e) { if (e.target === howto) howto.hidden = true; });
-
-  // ================= init =================
-  syncMuteBtns();
-  fitCanvas();
-  refreshHome();
-  attractStart();   // ambient gameplay behind the home hub
-  // LAN offline chip: show READY · OFFLINE OK vs OFFLINE READY, live on change.
-  if (typeof LanNet !== "undefined" && LanNet.refreshOfflineChip) {
-    LanNet.refreshOfflineChip();
-    window.addEventListener("online", LanNet.refreshOfflineChip);
-    window.addEventListener("offline", LanNet.refreshOfflineChip);
-  }
 
   // ================= Phase 3: home attract-mode =================
   // Bot-only demo on #homeBg: a ghost ship dodging falling blocks. Fully
@@ -4321,6 +4310,96 @@ function passportImport() {
 })();
 
 
+
+// ================= music + engine hum =================
+var Music = {
+  VOL: 1.0,                       // master music level (0..1)
+  on: false, step: 0, nextT: 0, bus: null, hum: null, lastX: null, spd: 0, noise: null,
+  roots: [110, 123.47, 98, 130.81, 116.54, 103.83, 123.47, 87.31],
+  scale: [0, 3, 5, 7, 10, 12, 15, 17],
+  arp: [0, 2, 4, 2, 5, 4, 2, 1],
+  start: function () {
+    var c = Sfx.ensure(); if (!c || this.on) return;
+    this.on = true; this.step = 0; this.nextT = c.currentTime + 0.1; this.lastX = null;
+    this.bus = c.createGain();
+    this.bus.gain.setValueAtTime(0.0001, c.currentTime);
+    this.bus.gain.exponentialRampToValueAtTime(this.VOL, c.currentTime + 1.5);
+    this.bus.connect(c.destination);
+    var o = c.createOscillator(), g = c.createGain(), f = c.createBiquadFilter();
+    o.type = "sawtooth"; o.frequency.value = 70; f.type = "lowpass"; f.frequency.value = 320;
+    g.gain.value = 0.0001; o.connect(f); f.connect(g); g.connect(this.bus); o.start();
+    this.hum = { o: o, g: g };
+    if (!this.noise) {
+      var n = c.createBuffer(1, c.sampleRate * 0.1, c.sampleRate), d = n.getChannelData(0);
+      for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      this.noise = n;
+    }
+  },
+  stop: function () {
+    if (!this.on) return;
+    this.on = false;
+    var c = Sfx.ctx, bus = this.bus, hum = this.hum;
+    this.bus = null; this.hum = null; this.lastX = null;
+    if (!c || !bus) return;
+    try {
+      bus.gain.cancelScheduledValues(c.currentTime);
+      bus.gain.setValueAtTime(Math.max(0.0001, bus.gain.value), c.currentTime);
+      bus.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.5);
+      setTimeout(function () {
+        try { if (hum) hum.o.stop(); bus.disconnect(); } catch (e) {}
+      }, 700);
+    } catch (e) {}
+  },
+  note: function (f, t, dur, type, gain) {
+    var c = Sfx.ctx; if (!c || !this.bus) return;
+    var o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.bus); o.start(t); o.stop(t + dur + 0.02);
+  },
+  hat: function (t, gain) {
+    var c = Sfx.ctx; if (!c || !this.bus || !this.noise) return;
+    var s = c.createBufferSource(), g = c.createGain(), f = c.createBiquadFilter();
+    s.buffer = this.noise; f.type = "highpass"; f.frequency.value = 7000;
+    g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    s.connect(f); f.connect(g); g.connect(this.bus); s.start(t); s.stop(t + 0.06);
+  },
+  tick: function () {
+    var playing = typeof G !== "undefined" && G.state === "playing" && !Sfx.muted && player;
+    if (!playing) { this.stop(); return; }
+    if (!this.on) this.start();
+    var c = Sfx.ctx; if (!c || !this.on) return;
+    var inten = Math.min(1, (G.elapsed || 0) / 180 + (G.combo || 0) / 60);
+    var sid = (G.sector && G.sector.id | 0) || 1;
+    var root = this.roots[(sid - 1) % this.roots.length];
+    var stepDur = 60 / (110 + inten * 50) / 2;
+    while (this.nextT < c.currentTime + 0.4) {
+      var st = this.step, t = this.nextT, m = st % 8;
+      if (m === 0) {
+        this.note(root, t, stepDur * 3.6, "sawtooth", 0.05);
+        this.note(110, t, 0.12, "sine", 0.07);            // kick thump
+      }
+      if (m === 4) this.note(root * 1.5, t, stepDur * 3, "sawtooth", 0.035);
+      var semi = this.scale[this.arp[m]];
+      this.note(root * 4 * Math.pow(2, semi / 12), t, stepDur * 0.9, "square", 0.018 + inten * 0.012);
+      if (inten > 0.35 && (st % 2 === 1)) this.hat(t, 0.02 + inten * 0.02);
+      this.nextT += stepDur; this.step++;
+    }
+    // engine hum follows ship speed
+    var x = player.x;
+    if (this.lastX != null) {
+      var v = Math.min(1, Math.abs(x - this.lastX) / 0.1 / 560);
+      this.spd += (v - this.spd) * 0.4;
+    }
+    this.lastX = x;
+    if (this.hum) {
+      this.hum.o.frequency.setTargetAtTime(62 + this.spd * 70, c.currentTime, 0.08);
+      this.hum.g.gain.setTargetAtTime(0.012 + this.spd * 0.03, c.currentTime, 0.08);
+    }
+  }
+};
+setInterval(function () { try { Music.tick(); } catch (e) {} }, 100);
 
 // ================= cloud (Supabase) =================
 // The anon key is a PUBLIC credential (safe in client code); abuse is limited
@@ -5853,6 +5932,19 @@ function deleteCloudRun(id) {
 try { Auth.load(); syncAuthUI(); } catch (e) {}
 try { Coins.render(); } catch (e) {}
 
+  // ================= init =================
+  syncMuteBtns();
+  fitCanvas();
+  refreshHome();
+  attractStart();   // ambient gameplay behind the home hub
+  // LAN offline chip: show READY · OFFLINE OK vs OFFLINE READY, live on change.
+  if (typeof LanNet !== "undefined" && LanNet.refreshOfflineChip) {
+    LanNet.refreshOfflineChip();
+    window.addEventListener("online", LanNet.refreshOfflineChip);
+    window.addEventListener("offline", LanNet.refreshOfflineChip);
+  }
+
+  
   route();
   window.addEventListener("load", fitCanvas);
   // ================= tutorial coach / buttons =================
